@@ -1,6 +1,6 @@
-// Rendering: both frames, always both on screen, stacked exactly as in
-// drafts/ssh-tui.html. Sizes come from layout.go, colors from styles.go — this
-// file only assembles them.
+// Rendering: the tab bar and the active tab's panel, stacked exactly as in
+// design/SSH_TUI.html. Sizes come from layout.go, colors from styles.go —
+// this file only assembles them.
 
 package main
 
@@ -12,30 +12,17 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 )
 
-const (
-	formHint = "tab / ← → move · space toggles method · enter connects · ctrl+c quits"
-	termHint = "every key goes to the session, ctrl+c included · ctrl+b closes it"
-)
-
-func (a appModel) View() tea.View {
+func (a *appModel) View() tea.View {
 	v := tea.NewView(a.render())
 	v.AltScreen = true
 	v.BackgroundColor = termBg
 	return v
 }
 
-func (a appModel) render() string {
+func (a *appModel) render() string {
 	w := a.pageWidth()
-	// Box widths follow the field contents, which change on every keystroke —
-	// re-sync here (on the render copy) so the inputs never disagree with the
-	// boxes they're drawn in.
-	a.syncInputWidths()
 
-	form := a.viewFormFrame(w)
-	term := a.viewTermFrame(w)
-	gap := lineStyle.Width(w).Render(" ")
-
-	page := lipgloss.JoinVertical(lipgloss.Left, form, gap, term)
+	page := lipgloss.JoinVertical(lipgloss.Left, a.viewTabBar(w), a.viewPanel(w))
 	if !a.confirmQuit {
 		return page
 	}
@@ -63,98 +50,192 @@ func centerOver(page, modal string, w int) string {
 		Render()
 }
 
-func (a appModel) viewQuitDialog() string {
+func (a *appModel) viewQuitDialog() string {
 	lines := []string{dialogTitleStyle.Render("Quit lazyssh?")}
-	if a.hasSSH && a.ssh.Connected() {
-		lines = append(lines, dialogBodyStyle.Render("The SSH session will be closed."))
+	if n := a.connectedCount(); n > 0 {
+		body := "The SSH session will be closed."
+		if n > 1 {
+			body = fmt.Sprintf("%d SSH sessions will be closed.", n)
+		}
+		lines = append(lines, dialogBodyStyle.Render(body))
 	}
 	lines = append(lines, "", dialogKeyStyle.Render("y / enter  quit     n / esc  cancel"))
 
 	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
 }
 
-func (a appModel) viewFormFrame(w int) string {
-	header := frameHeader("Navigation", formHint, w)
-
-	boxes := a.fieldWidths()
-
-	// Width on the style is the total box width (border and padding included);
-	// clipLine keeps whatever goes inside on a single line, so an overlong
-	// value can never wrap and push the row to two lines.
-	box := func(i int, blurred, focused lipgloss.Style, content string) string {
-		style := blurred
-		// While the session owns the keyboard, no field is really focused.
-		if a.focus == i && !a.connected {
-			style = focused
+func (a *appModel) connectedCount() int {
+	n := 0
+	for i := range a.tabs {
+		if a.tabs[i].hasSSH && a.tabs[i].ssh.Connected() {
+			n++
 		}
-		return style.Width(boxes[i]).Render(clipLine(content, max(1, boxes[i]-fieldChrome)))
 	}
-
-	centered := func(s lipgloss.Style) lipgloss.Style { return s.Align(lipgloss.Center) }
-
-	row := lipgloss.JoinHorizontal(lipgloss.Top,
-		box(fieldHost, fieldStyle, focusedFieldStyle, a.host.View()), " ",
-		box(fieldUser, fieldStyle, focusedFieldStyle, a.user.View()), " ",
-		box(fieldMethod, centered(fieldStyle), centered(focusedFieldStyle), a.methodLabel()), " ",
-		box(fieldSecret, fieldStyle, focusedFieldStyle, a.secret.View()), " ",
-		box(fieldConnect, centered(connectStyle), centered(focusedConnectStyle), "Connect"),
-	)
-
-	body := row
-	if a.status != "" {
-		body = lipgloss.JoinVertical(lipgloss.Left, row, "", a.viewStatusBar())
-	}
-
-	// return lipgloss.JoinVertical(lipgloss.Left, header, panelStyle.Width(w).Render(body))
-	return lipgloss.JoinVertical(lipgloss.Left, header, body)
+	return n
 }
 
-func (a appModel) viewStatusBar() string {
-	style, status := statusStyle, a.status
+// viewTabBar renders one small rounded box per tab (dot + label + close
+// glyph), plus a trailing "+" box — the browser-tab strip from the design.
+func (a *appModel) viewTabBar(w int) string {
+	parts := make([]string, 0, len(a.tabs)*2+2)
+	for i := range a.tabs {
+		if i > 0 {
+			parts = append(parts, " ")
+		}
+		parts = append(parts, a.viewTab(&a.tabs[i]))
+	}
+	parts = append(parts, " ", addTabStyle.Render("+"))
 
-	switch {
-	case a.connected && a.ssh.Connected():
-		status = fmt.Sprintf("connected — %s@%s", a.user.Value(), a.host.Value())
-		style = okStatusStyle
-	case a.lastErr != nil && !a.connected:
+	bar := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
+	return lineStyle.Width(w).Render(clipBlock(bar, w))
+}
+
+func (a *appModel) viewTab(t *tabState) string {
+	style, dot := tabStyle, tabDotOffStyle
+	if t.id == a.active {
+		style = activeTabStyle
+	}
+	if t.connected {
+		dot = tabDotOnStyle
+	}
+
+	label := clipLine(t.tabLabel(), maxTabLabelWidth)
+	content := dot.Render("●") + " " + label + " " + tabCloseStyle.Render("×")
+	return style.Render(content)
+}
+
+// viewPanel renders the active tab's content box: the form if it's not
+// connected yet, the live terminal if it is. The box always fills the space
+// below the tab bar, whichever screen is showing, so switching between them
+// never resizes the window.
+func (a *appModel) viewPanel(w int) string {
+	t := a.curentTab()
+	h := a.panelInnerHeight()
+
+	content := a.viewForm(t)
+	if t.connected {
+		content = a.viewTerminal(t)
+	}
+	return panelStyle.Width(w).Height(h).Render(content)
+}
+
+func (a *appModel) viewForm(t *tabState) string {
+	rows := []string{
+		hintStyle.Render("tab / shift+tab move · enter connects"),
+		"",
+		a.fieldRow("address", t.host.View(), t.focus == fieldHost),
+		a.fieldRow("port", t.port.View(), t.focus == fieldPort),
+		a.fieldRow("user", t.user.View(), t.focus == fieldUser),
+		a.methodRow(t),
+		a.fieldRow(t.secretFieldLabel(), t.secret.View(), t.focus == fieldSecret),
+		"",
+		a.connectRow(t),
+	}
+
+	if status := a.viewStatus(t); status != "" {
+		rows = append(rows, "", status)
+	}
+
+	rows = append(rows, "",
+		hintStyle.Render("host keys: accept-new (silent) · ctrl+t opens a new tab"))
+
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (a *appModel) fieldRow(label, value string, focused bool) string {
+	style := fieldStyle
+	if focused {
+		style = focusedFieldStyle
+	}
+	box := style.Width(a.fieldBoxWidth()).Render(clipLine(value, a.fieldInputWidth()))
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		labelStyle.Render(label),
+		lineStyle.Width(labelGap).Render(""),
+		box,
+	)
+}
+
+func (a *appModel) methodRow(t *tabState) string {
+	style := fieldStyle
+	if t.focus == fieldMethod {
+		style = focusedFieldStyle
+	}
+
+	inner := a.fieldInputWidth()
+	left, right := t.methodLabel(), "space to switch"
+	content := left
+	if pad := inner - lipgloss.Width(left) - lipgloss.Width(right); pad > 0 {
+		content = left + strings.Repeat(" ", pad) + hintStyle.Render(right)
+	} else {
+		content = clipLine(left, inner)
+	}
+
+	box := style.Width(a.fieldBoxWidth()).Render(content)
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		labelStyle.Render("method"),
+		lineStyle.Width(labelGap).Render(""),
+		box,
+	)
+}
+
+func (a *appModel) connectRow(t *tabState) string {
+	style := connectStyle
+	if t.focus == fieldConnect {
+		style = focusedConnectStyle
+	}
+	indent := lineStyle.Width(labelColWidth + labelGap).Render("")
+	return lipgloss.JoinHorizontal(lipgloss.Top, indent, style.Render("Connect"))
+}
+
+func (a *appModel) viewStatus(t *tabState) string {
+	if t.status == "" {
+		return ""
+	}
+	style := statusStyle
+	if t.lastErr != nil {
 		style = errStatusStyle
 	}
-	return style.Width(a.formInnerWidth()).Render(status)
+	w := a.panelInnerWidth()
+	return style.Width(w).Render(clipLine(t.status, w))
 }
 
-func (a appModel) viewTermFrame(w int) string {
-	header := frameHeader("Terminal", termHint, w)
-
+func (a *appModel) viewTerminal(t *tabState) string {
 	cols, rows := a.termSize()
-	content := a.termContent()
 
-	// Pad / clip the content block to the allocated size so the panel keeps a
-	// stable footprint whether connected or not.
-	content = termContentStyle.
+	left := lipgloss.JoinHorizontal(lipgloss.Top,
+		statusStyle.Render(t.target()),
+		"  ",
+		hintStyle.Render(t.secretSummary()),
+	)
+
+	var badge string
+	switch {
+	case t.ssh.Connected():
+		badge = connectedBadgeStyle.Render("connected")
+	case t.lastErr != nil:
+		badge = errStatusStyle.Render(t.status)
+	default:
+		badge = hintStyle.Render(t.status)
+	}
+
+	gap := max(1, cols-lipgloss.Width(left)-lipgloss.Width(badge))
+	header := clipLine(left+strings.Repeat(" ", gap)+badge, cols)
+
+	content := termContentStyle.
 		Width(cols).
 		Height(rows).
-		Render(padBlock(content, cols, rows))
+		Render(padBlock(a.termContent(t), cols, rows))
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, panelStyle.Width(w).Render(content))
+	footer := hintStyle.Render("ctrl+b — close the session and return to the form (values kept)")
+
+	return lipgloss.JoinVertical(lipgloss.Left, header, "", content, "", footer)
 }
 
-func (a appModel) termContent() string {
-	if a.hasSSH {
-		return a.ssh.Content()
+func (a *appModel) termContent(t *tabState) string {
+	if t.hasSSH {
+		return t.ssh.Content()
 	}
 	return ""
-}
-
-// frameHeader renders a frame's label and key hint on exactly one line, spanning
-// the page. The hint is the first thing to go on a narrow terminal — letting it
-// wrap would silently steal a row from the layout below.
-func frameHeader(label, hint string, w int) string {
-	line := lipgloss.JoinHorizontal(lipgloss.Bottom,
-		labelStyle.Render(label),
-		"  ",
-		hintStyle.Render(hint),
-	)
-	return lineStyle.Width(w).Render(clipLine(line, w))
 }
 
 // clipLine reduces s to its first line, truncated to cols cells. Truncation is
@@ -163,6 +244,16 @@ func clipLine(s string, cols int) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
+	if lipgloss.Width(s) <= cols {
+		return s
+	}
+	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
+}
+
+// clipBlock clamps every line of a possibly multi-line block to cols cells,
+// unlike clipLine it never drops lines after the first — for the tab bar,
+// whose boxes are three lines tall (top border, content, bottom border).
+func clipBlock(s string, cols int) string {
 	if lipgloss.Width(s) <= cols {
 		return s
 	}

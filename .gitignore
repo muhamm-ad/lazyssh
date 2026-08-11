@@ -4,3 +4,9 @@
 *.test
 *.out
 .DS_Store
+
+design/
+drafts/
+
+*.gv
+*.dot

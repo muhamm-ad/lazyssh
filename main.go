@@ -1,19 +1,25 @@
 // Command lazyssh is a demonstrative full-screen SSH client that mirrors the
-// drafts/ssh-tui.html layout: both frames stay on screen at once — the
-// connection form on top and the live terminal below. There is no page or
-// window switch.
+// design/SSH_TUI.html layout: a row of tabs across the top, each an
+// independent SSH session, and a single panel below showing whichever
+// screen the active tab is on — its connection form, or its live terminal.
+// A tab keeps running in the background while another tab is on screen.
 //
-// Commands (as on the design):
+// Commands (as on the design, plus the tab shortcuts a mouse-driven mockup
+// doesn't need):
 //
-//	tab / ←→   move between form fields
-//	space      toggle auth method (when method is focused)
-//	enter      connect
-//	ctrl+b     close the session (form stays filled, ready to reconnect)
-//	ctrl+c     quit, after confirming in a dialog
+//	tab / ←→          move between form fields (address, port, user, method, key/password)
+//	space             toggle auth method (when method is focused)
+//	enter             connect
+//	ctrl+b            close the active tab's session (form stays filled, ready to reconnect)
+//	ctrl+t            open a new tab
+//	ctrl+w            close the active tab
+//	ctrl+→ / ctrl+←   switch tabs
+//	ctrl+q            quit, after confirming in a dialog
 //
-// Once connected, every other key routes straight to the remote shell —
-// ctrl+c included, so it interrupts the remote command instead of this
-// program. Press ctrl+b first to take the keyboard back, then ctrl+c.
+// The tab shortcuts and ctrl+b work even while a session owns the keyboard,
+// same as ctrl+q's confirm gate — everything else routes straight to the
+// remote shell once connected, ctrl+q included, so it interrupts the remote
+// command instead of this program.
 //
 //	go run ./lazyssh
 //
