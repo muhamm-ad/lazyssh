@@ -1,9 +1,10 @@
-// Colors and styles, transcribed from drafts/ssh-tui.html. Keeping them in one
+// Colors and styles, transcribed from design/SSH_TUI.html. Keeping them in one
 // place means the design can be re-checked against this file alone.
 //
-// Only one background is painted: the terminal's own, set once on the tea.View.
-// Every element below is transparent and carries color in its text and borders
-// alone, so the whole UI sits flat on that single background.
+// Unlike the single-shared-background version this used to be, the new design
+// paints real backgrounds on its panels and boxes (tabs, the content panel,
+// input fields, the connected badge) — each is its own layer, not just a
+// border on the page background.
 
 package main
 
@@ -12,9 +13,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 )
 
-// Palette, straight from the design's CSS.
 var (
-	// termBg is the one background in the program — see View in view.go.
 	termBg = lipgloss.Color("#141414")
 
 	textFg   = lipgloss.Color("#e6e6e6")
@@ -22,25 +21,31 @@ var (
 	dimFg    = lipgloss.Color("#5c5c5c")
 	statusFg = lipgloss.Color("#6b6b6b")
 	errFg    = lipgloss.Color("#ff8a80")
-	termFg   = lipgloss.Color("#3fb950")
+	termFg   = lipgloss.Color("#4AFF75")
 
 	borderFg      = lipgloss.Color("#333333")
-	accentFg      = lipgloss.Color("#4a9eff")
+	accentFg      = lipgloss.Color("#4AFF75")
 	connectFg     = lipgloss.Color("#4AFF75")
 	connectBorder = lipgloss.Color("#2A9439")
+
+	tabActiveFg   = lipgloss.Color("#e6e6e6")
+	tabInactiveFg = lipgloss.Color("#7a7a7a")
+	tabDotOn      = lipgloss.Color("#4AFF75")
+	tabDotOff     = lipgloss.Color("#4a4a4a")
+	tabCloseFg    = lipgloss.Color("#6b6b6b")
+
+	badgeBg = lipgloss.Color("#12291a")
 )
 
 var (
-	// lineStyle carries no color at all: it only pads a line out to the full
-	// page width, so joined blocks line up instead of leaving ragged rows.
 	lineStyle = lipgloss.NewStyle()
 
 	labelStyle = lipgloss.NewStyle().
 			Foreground(mutedFg).
-			Bold(true)
+			Width(labelColWidth).
+			Align(lipgloss.Right)
 
-	hintStyle = lipgloss.NewStyle().
-			Foreground(dimFg)
+	hintStyle = lipgloss.NewStyle().Foreground(dimFg)
 
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -56,9 +61,6 @@ var (
 			Padding(0, 1).
 			Height(1)
 
-	focusedFieldStyle = fieldStyle.
-				BorderForeground(accentFg)
-
 	connectStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(connectBorder).
@@ -66,46 +68,45 @@ var (
 			Padding(0, 1).
 			Height(1)
 
-	focusedConnectStyle = connectStyle.
-				BorderForeground(accentFg)
+	focusedFieldStyle   = fieldStyle.BorderForeground(accentFg)
+	focusedConnectStyle = connectStyle.BorderForeground(accentFg)
 
-	statusStyle = lipgloss.NewStyle().
-			Foreground(statusFg).
-			Align(lipgloss.Center)
+	statusStyle = lipgloss.NewStyle().Foreground(dimFg)
+	errStyle    = lipgloss.NewStyle().Foreground(errFg)
 
-	errStatusStyle = statusStyle.
-			Foreground(errFg)
+	termContentStyle = lipgloss.NewStyle().Foreground(dimFg)
 
-	okStatusStyle = statusStyle.
-			Foreground(termFg)
-
-	termContentStyle = lipgloss.NewStyle().
-				Foreground(textFg)
-
-	termIdleStyle = lipgloss.NewStyle().
-			Foreground(termFg)
-
-	// The dialog is drawn on its own layer over the rest of the UI. Its cells
-	// are opaque even without a background — spaces overwrite what's beneath.
 	dialogStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accentFg).
 			Padding(1, 4).
 			Align(lipgloss.Center)
+	dialogTitleStyle = lipgloss.NewStyle().Foreground(textFg).Bold(true)
+	dialogBodyStyle  = lipgloss.NewStyle().Foreground(statusFg)
+	dialogKeyStyle   = lipgloss.NewStyle().Foreground(dimFg)
 
-	dialogTitleStyle = lipgloss.NewStyle().
-				Foreground(textFg).
-				Bold(true)
+	helpCategoryStyle = lipgloss.NewStyle().Foreground(accentFg).Bold(true)
+	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(18)
+	helpDescStyle     = lipgloss.NewStyle().Foreground(dimFg)
 
-	dialogBodyStyle = lipgloss.NewStyle().
-			Foreground(statusFg)
+	tabStyle = lipgloss.NewStyle().
+			Foreground(tabInactiveFg).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderFg).
+			Padding(0, 1).
+			Height(1)
+	addTabStyle    = tabStyle.Foreground(mutedFg)
+	activeTabStyle = tabStyle.Foreground(tabActiveFg).BorderForeground(accentFg)
+	tabDotOnStyle  = lipgloss.NewStyle().Foreground(tabDotOn)
+	tabDotOffStyle = lipgloss.NewStyle().Foreground(tabDotOff)
+	tabCloseStyle  = lipgloss.NewStyle().Foreground(tabCloseFg)
 
-	dialogKeyStyle = lipgloss.NewStyle().
-			Foreground(dimFg)
+	connectedBadgeStyle = lipgloss.NewStyle().
+				Background(badgeBg).
+				Foreground(termFg).
+				Padding(0, 1)
 )
 
-// styleInput keeps a textinput transparent like the box around it, and only
-// recolors its text, placeholder and cursor.
 func styleInput(m *textinput.Model) {
 	s := textinput.DefaultDarkStyles()
 	s.Focused.Text = lipgloss.NewStyle().Foreground(textFg)

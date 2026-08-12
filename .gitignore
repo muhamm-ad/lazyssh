@@ -4,3 +4,13 @@
 *.test
 *.out
 .DS_Store
+
+design/
+drafts/
+
+*.gv
+*.dot
+
+lazyssh.log
+lazyssh.lock
+lazyssh.svg

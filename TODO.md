@@ -1,10 +1,5 @@
 # TODO
 
-`lazyssh` v0 is deliberately minimal: one connection at a time, no saved
-state, password or key auth only. Everything below is a real idea, not a
-promise — priorities are my best guess at what unlocks the most value per
-unit of effort, not a schedule.
-
 ## P1 — next up
 
 **Saved connection profiles.** The form re-filling itself with the last
@@ -35,12 +30,6 @@ strict / accept-new / insecure — at least in a config file if not in the
 form itself, so the trade-off is a decision the user made, not one made
 for them.
 
-**Multiple simultaneous sessions.** `bubblessh.Model` is already safe to
-run several at once (each instance tags its own async messages — see
-bubble-ssh's split-pane example). Tabs or a pane switcher on top of
-today's single-session screen, reusing that existing safety property
-rather than needing anything new from bubble-ssh itself.
-
 **`~/.ssh/config` awareness.** Parse `Host` blocks to pre-fill the form
 (and maybe the profile picker) from aliases the user already has —
 `ssh myserver` should be enough of a hint to offer the same shortcut here.
@@ -57,10 +46,9 @@ later review. Needs a decision on rotation/redaction (a logged session can
 easily contain a password typed at a remote prompt) before this is safe to
 ship casually.
 
-**Theming.** The lipgloss colors in `main.go` are hardcoded (`240`, `39`,
-`42`, `203`, `235`, `252`). Pulling them into a small `Theme` struct with
-a couple of presets is easy; deciding it's worth the surface area to
-maintain is the actual open question.
+**Theming.** The lipgloss colors in `styles.go` are hardcoded. Pulling them
+into a small `Theme` struct with a couple of presets is easy; deciding it's
+worth the surface area to maintain is the actual open question.
 
 **Distribution polish.** `-version`/`-h` flags, a Homebrew tap, a Scoop
 manifest for Windows. Only worth it once there's something worth
