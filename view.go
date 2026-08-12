@@ -12,45 +12,41 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 )
 
-func (a *appModel) View() tea.View {
+func (a *AppModel) View() tea.View {
 	v := tea.NewView(a.render())
 	v.AltScreen = true
 	v.BackgroundColor = termBg
 	return v
 }
 
-func (a *appModel) render() string {
-	w := a.pageWidth()
-
-	page := lipgloss.JoinVertical(lipgloss.Left, a.viewTabBar(w), a.viewPanel(w))
-	if !a.confirmQuit {
+func (a *AppModel) render() string {
+	tabBar := a.viewTabBar(a.width)
+	panel := a.viewPanel(a.width)
+	help := a.viewHelpBar(a.width)
+	page := lipgloss.JoinVertical(lipgloss.Left, tabBar, panel, help)
+	switch {
+	case a.confirmQuit:
+		return centerOver(page, a.viewQuitDialog(), a.width, a.height)
+	case a.showHelp:
+		return centerOver(page, a.viewHelpModal(), a.width, a.height)
+	default:
 		return page
 	}
-	return centerOver(page, a.viewQuitDialog(), w)
 }
 
-// centerOver draws modal on its own layer, centered over page. Composing on a
-// canvas is what makes it a real modal: the dialog's cells replace whatever was
-// underneath instead of pushing the layout around.
-//
-// Both layers go through a single Compositor on purpose — chaining two
-// Canvas.Compose calls instead leaves only the last layer standing.
-//
-// The canvas is sized to the page, not the window, so putting the dialog up
-// never changes how many rows the layout occupies.
-func centerOver(page, modal string, w int) string {
-	h := lipgloss.Height(page)
-	top := lipgloss.NewLayer(modal).
+func centerOver(page, modal string, w int, h int) string {
+	topLayer := lipgloss.NewLayer(modal).
 		X(max(0, (w-lipgloss.Width(modal))/2)).
 		Y(max(0, (h-lipgloss.Height(modal))/2)).
 		Z(1)
 
+	bottomLayer := lipgloss.NewLayer(page)
+
 	return lipgloss.NewCanvas(w, h).
-		Compose(lipgloss.NewCompositor(lipgloss.NewLayer(page), top)).
-		Render()
+		Compose(lipgloss.NewCompositor(bottomLayer, topLayer)).Render()
 }
 
-func (a *appModel) viewQuitDialog() string {
+func (a *AppModel) viewQuitDialog() string {
 	lines := []string{dialogTitleStyle.Render("Quit lazyssh?")}
 	if n := a.connectedCount(); n > 0 {
 		body := "The SSH session will be closed."
@@ -64,19 +60,40 @@ func (a *appModel) viewQuitDialog() string {
 	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
 }
 
-func (a *appModel) connectedCount() int {
+func (a *AppModel) viewHelpModal() string {
+	rows := []string{dialogTitleStyle.Render("Help"), ""}
+	for i, cat := range helpCategories {
+		if i > 0 {
+			rows = append(rows, "")
+		}
+		rows = append(rows, helpCategoryStyle.Render(cat.title))
+		for _, e := range cat.entries {
+			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top,
+				helpKeyStyle.Render(e.keys),
+				helpDescStyle.Render(e.desc),
+			))
+		}
+	}
+	rows = append(rows, "", dialogKeyStyle.Render("esc / ctrl+h  close"))
+
+	return dialogStyle.
+		Align(lipgloss.Left).
+		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
+}
+
+func (a *AppModel) connectedCount() int {
 	n := 0
 	for i := range a.tabs {
-		if a.tabs[i].hasSSH && a.tabs[i].ssh.Connected() {
+		if a.tabs[i].HasSSH && a.tabs[i].SSH.Connected() {
 			n++
 		}
 	}
 	return n
 }
 
-// viewTabBar renders one small rounded box per tab (dot + label + close
-// glyph), plus a trailing "+" box — the browser-tab strip from the design.
-func (a *appModel) viewTabBar(w int) string {
+// viewTabBar renders one small rounded box per tab (dot + label + close glyph),
+// plus a trailing "+" box — the browser-tab strip from the design.
+func (a *AppModel) viewTabBar(w int) string {
 	parts := make([]string, 0, len(a.tabs)*2+2)
 	for i := range a.tabs {
 		if i > 0 {
@@ -86,21 +103,27 @@ func (a *appModel) viewTabBar(w int) string {
 	}
 	parts = append(parts, " ", addTabStyle.Render("+"))
 
-	bar := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
-	return lineStyle.Width(w).Render(clipBlock(bar, w))
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
+	return lineStyle.Width(w).Render(clipBlock(tabBar, w))
 }
 
-func (a *appModel) viewTab(t *tabState) string {
+func (a *AppModel) viewTab(t *Tab) string {
 	style, dot := tabStyle, tabDotOffStyle
-	if t.id == a.active {
+	if t.ID == a.active {
 		style = activeTabStyle
 	}
-	if t.connected {
+	if t.Connected {
 		dot = tabDotOnStyle
 	}
 
-	label := clipLine(t.tabLabel(), maxTabLabelWidth)
-	content := dot.Render("●") + " " + label + " " + tabCloseStyle.Render("×")
+	label := clipLine(t.GetTabLabel(), maxTabLabelWidth)
+	content := lipgloss.JoinHorizontal(lipgloss.Center,
+		dot.Render("●"),
+		" ",
+		label,
+		" ",
+		tabCloseStyle.Render("×"),
+	)
 	return style.Render(content)
 }
 
@@ -108,26 +131,26 @@ func (a *appModel) viewTab(t *tabState) string {
 // connected yet, the live terminal if it is. The box always fills the space
 // below the tab bar, whichever screen is showing, so switching between them
 // never resizes the window.
-func (a *appModel) viewPanel(w int) string {
+func (a *AppModel) viewPanel(w int) string {
 	t := a.curentTab()
 	h := a.panelInnerHeight()
 
 	content := a.viewForm(t)
-	if t.connected {
+	if t.Connected {
 		content = a.viewTerminal(t)
 	}
-	return panelStyle.Width(w).Height(h).Render(content)
+	return panelStyle.Width(w).Height(h).Align(lipgloss.Center, lipgloss.Center).Render(content)
 }
 
-func (a *appModel) viewForm(t *tabState) string {
+func (a *AppModel) viewForm(t *Tab) string {
 	rows := []string{
-		hintStyle.Render("tab / shift+tab move · enter connects"),
-		"",
-		a.fieldRow("address", t.host.View(), t.focus == fieldHost),
-		a.fieldRow("port", t.port.View(), t.focus == fieldPort),
-		a.fieldRow("user", t.user.View(), t.focus == fieldUser),
+		// hintStyle.Render("tab / shift+tab move · enter connects"),
+		// "",
+		a.fieldRow("address", t.Host.View(), t.Focus == fieldHost),
+		a.fieldRow("port", t.Port.View(), t.Focus == fieldPort),
+		a.fieldRow("user", t.User.View(), t.Focus == fieldUser),
 		a.methodRow(t),
-		a.fieldRow(t.secretFieldLabel(), t.secret.View(), t.focus == fieldSecret),
+		a.fieldRow(t.secretFieldLabel(), t.Secret.View(), t.Focus == fieldSecret),
 		"",
 		a.connectRow(t),
 	}
@@ -136,70 +159,68 @@ func (a *appModel) viewForm(t *tabState) string {
 		rows = append(rows, "", status)
 	}
 
-	rows = append(rows, "",
-		hintStyle.Render("host keys: accept-new (silent) · ctrl+t opens a new tab"))
+	// rows = append(rows, "", hintStyle.Render("host keys: accept-new (silent) · ctrl+t opens a new tab"))
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func (a *appModel) fieldRow(label, value string, focused bool) string {
+func (a *AppModel) fieldRow(label, value string, focused bool) string {
 	style := fieldStyle
 	if focused {
 		style = focusedFieldStyle
 	}
-	box := style.Width(a.fieldBoxWidth()).Render(clipLine(value, a.fieldInputWidth()))
-	return lipgloss.JoinHorizontal(lipgloss.Top,
+	box := style.Width(a.fieldBoxWidth()).Render(clipLine(value, a.fieldBoxWidth()))
+	return lipgloss.JoinHorizontal(lipgloss.Center,
 		labelStyle.Render(label),
 		lineStyle.Width(labelGap).Render(""),
 		box,
 	)
 }
 
-func (a *appModel) methodRow(t *tabState) string {
+func (a *AppModel) methodRow(t *Tab) string {
 	style := fieldStyle
-	if t.focus == fieldMethod {
+	if t.Focus == fieldMethod {
 		style = focusedFieldStyle
 	}
 
-	inner := a.fieldInputWidth()
-	left, right := t.methodLabel(), "space to switch"
-	content := left
-	if pad := inner - lipgloss.Width(left) - lipgloss.Width(right); pad > 0 {
-		content = left + strings.Repeat(" ", pad) + hintStyle.Render(right)
-	} else {
+	inner := a.fieldBoxWidth()
+	left := t.methodLabel()
+	hint := hintStyle.Render("(space to switch)")
+	content := left + " " + hint
+	if lipgloss.Width(content) > inner {
 		content = clipLine(left, inner)
 	}
 
 	box := style.Width(a.fieldBoxWidth()).Render(content)
-	return lipgloss.JoinHorizontal(lipgloss.Top,
+	return lipgloss.JoinHorizontal(lipgloss.Center,
 		labelStyle.Render("method"),
 		lineStyle.Width(labelGap).Render(""),
 		box,
 	)
 }
 
-func (a *appModel) connectRow(t *tabState) string {
+func (a *AppModel) connectRow(t *Tab) string {
 	style := connectStyle
-	if t.focus == fieldConnect {
+	if t.Focus == fieldConnect {
 		style = focusedConnectStyle
 	}
-	indent := lineStyle.Width(labelColWidth + labelGap).Render("")
-	return lipgloss.JoinHorizontal(lipgloss.Top, indent, style.Render("Connect"))
+	formW := labelColWidth + labelGap + a.fieldBoxWidth()
+	return lineStyle.Width(formW).Align(lipgloss.Center).Render(style.Render("Connect"))
 }
 
-func (a *appModel) viewStatus(t *tabState) string {
-	if t.status == "" {
+func (a *AppModel) viewStatus(t *Tab) string {
+	if t.Status == "" {
 		return ""
 	}
 	style := statusStyle
-	if t.lastErr != nil {
-		style = errStatusStyle
+	if t.LastErr != nil {
+		style = errStyle
 	}
 	w := a.panelInnerWidth()
-	return style.Width(w).Render(clipLine(t.status, w))
+	return style.Width(w).Render(clipLine(t.Status, w))
 }
 
-func (a *appModel) viewTerminal(t *tabState) string {
+func (a *AppModel) viewTerminal(t *Tab) string {
 	cols, rows := a.termSize()
 
 	left := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -210,12 +231,12 @@ func (a *appModel) viewTerminal(t *tabState) string {
 
 	var badge string
 	switch {
-	case t.ssh.Connected():
+	case t.SSH.Connected():
 		badge = connectedBadgeStyle.Render("connected")
-	case t.lastErr != nil:
-		badge = errStatusStyle.Render(t.status)
+	case t.LastErr != nil:
+		badge = errStyle.Render(t.Status)
 	default:
-		badge = hintStyle.Render(t.status)
+		badge = hintStyle.Render(t.Status)
 	}
 
 	gap := max(1, cols-lipgloss.Width(left)-lipgloss.Width(badge))
@@ -231,9 +252,9 @@ func (a *appModel) viewTerminal(t *tabState) string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, "", content, "", footer)
 }
 
-func (a *appModel) termContent(t *tabState) string {
-	if t.hasSSH {
-		return t.ssh.Content()
+func (a *AppModel) termContent(t *Tab) string {
+	if t.HasSSH {
+		return t.SSH.Content()
 	}
 	return ""
 }
@@ -251,8 +272,7 @@ func clipLine(s string, cols int) string {
 }
 
 // clipBlock clamps every line of a possibly multi-line block to cols cells,
-// unlike clipLine it never drops lines after the first — for the tab bar,
-// whose boxes are three lines tall (top border, content, bottom border).
+// unlike clipLine it never drops lines after the first
 func clipBlock(s string, cols int) string {
 	if lipgloss.Width(s) <= cols {
 		return s
@@ -276,4 +296,13 @@ func padBlock(s string, cols, rows int) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (a *AppModel) viewHelpBar(w int) string {
+	leftInfo := "ctrl+h — show help"
+	rightInfo := fmt.Sprintf("Window size: %dx%d", a.width, a.height)
+	padding := 1
+	gap := max(1, w-lipgloss.Width(leftInfo)-lipgloss.Width(rightInfo)-padding*2)
+	line := leftInfo + strings.Repeat(" ", gap) + rightInfo
+	return hintStyle.Width(w).Padding(0, padding).Render(clipLine(line, w))
 }

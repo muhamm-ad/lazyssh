@@ -10,3 +10,7 @@ drafts/
 
 *.gv
 *.dot
+
+lazyssh.log
+lazyssh.lock
+lazyssh.svg
