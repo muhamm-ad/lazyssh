@@ -35,12 +35,17 @@ var helpCategories = []helpCategory{
 			{"tab / shift+tab", "move between fields"},
 			{"space", "toggle auth method (on method)"},
 			{"enter", "connect"},
+			{"ctrl+a", "select all in the focused field"},
+			{"ctrl+c", "copy (not password)"},
+			{"ctrl+x", "cut (not password)"},
+			{"ctrl+v", "paste"},
+			{"ctrl+z", "undo"},
 		},
 	},
 	{
 		title: "Session",
 		entries: []helpEntry{
-			{"ctrl+b", "close session, keep form values"},
+			{"exit", "leave the remote shell and return to the form"},
 		},
 	},
 }

@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"strings"
+	"io"
 
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"github.com/atotto/clipboard"
 
 	bubblessh "github.com/muhamm-ad/bubble-ssh"
 )
@@ -25,12 +27,19 @@ type Tab struct {
 	Host, Port, User, Secret textinput.Model
 	UsePassword              bool // method toggle: true = password, false = private key
 	Focus                    int  // one of the fieldXxx constants above
-	Connected                bool // true => this tab shows the terminal screen
 
-	SSH     bubblessh.Model
-	HasSSH  bool // true once connect has built a Model at least once
-	LastErr error
-	Status  string
+	SSH *bubblessh.Model
+
+	Status       string
+	TextSelected bool
+	undo         []fieldSnapshot
+}
+
+type fieldSnapshot struct {
+	Host, Port, User, Secret             string
+	HostPos, PortPos, UserPos, SecretPos int
+	Focus                                int
+	TextSelected                         bool
 }
 
 const (
@@ -78,6 +87,194 @@ func NewTab(id int) Tab {
 	return tab
 }
 
+// inSession is true while this tab should show the terminal screen: either
+// still dialing or already up. Error/closed/no-model fall back to the form.
+func (t *Tab) inSession() bool {
+	if t.SSH == nil {
+		return false
+	}
+	s := t.SSH.State()
+	return s == bubblessh.StateConnecting || s == bubblessh.StateConnected
+}
+
+// statusText is the one-line message under the form (and the terminal badge
+// while connecting). Prefers a form-level Status when the session is not live.
+func (t *Tab) statusText() string {
+	if t.SSH != nil {
+		switch t.SSH.State() {
+		case bubblessh.StateConnecting:
+			return "connecting…"
+		case bubblessh.StateConnected:
+			return fmt.Sprintf("connected — %s@%s", t.User.Value(), t.Host.Value())
+		}
+		if t.Status != "" {
+			return t.Status
+		}
+		if err := t.SSH.Err(); err != nil && err != io.EOF {
+			return err.Error()
+		}
+		return ""
+	}
+	return t.Status
+}
+
+func (t *Tab) statusIsError() bool {
+	if t.Status != "" && !t.inSession() {
+		return true
+	}
+	if t.SSH == nil {
+		return false
+	}
+	err := t.SSH.Err()
+	return (err != nil && err != io.EOF) || t.SSH.State() == bubblessh.StateError
+}
+
+func (t *Tab) updateSSH(msg tea.Msg) tea.Cmd {
+	if t.SSH == nil {
+		return nil
+	}
+	m, cmd := t.SSH.Update(msg)
+	updated := m.(bubblessh.Model)
+	t.SSH = &updated
+	return cmd
+}
+
+func (t *Tab) setSSHSize(cols, rows int) tea.Cmd {
+	if t.SSH == nil {
+		return nil
+	}
+	updated, cmd := t.SSH.SetSize(cols, rows)
+	t.SSH = &updated
+	return cmd
+}
+
+func (t *Tab) focusedInput() *textinput.Model {
+	switch t.Focus {
+	case fieldHost:
+		return &t.Host
+	case fieldPort:
+		return &t.Port
+	case fieldUser:
+		return &t.User
+	case fieldSecret:
+		return &t.Secret
+	default:
+		return nil
+	}
+}
+
+func (t *Tab) secretLocked() bool {
+	return t.UsePassword && t.Focus == fieldSecret
+}
+
+func (t *Tab) selectAllFocused() {
+	if t.focusedInput() == nil {
+		return
+	}
+	t.TextSelected = true
+}
+
+func (t *Tab) copyFocused() {
+	if t.secretLocked() {
+		return
+	}
+	in := t.focusedInput()
+	if in == nil {
+		return
+	}
+	_ = clipboard.WriteAll(in.Value())
+}
+
+func (t *Tab) cutFocused() {
+	if t.secretLocked() {
+		return
+	}
+	in := t.focusedInput()
+	if in == nil {
+		return
+	}
+	t.pushUndo()
+	_ = clipboard.WriteAll(in.Value())
+	in.Reset()
+	t.clearSelection()
+}
+
+func (t *Tab) clearSelection() {
+	t.TextSelected = false
+}
+
+func (t *Tab) replaceSelectedIfNeeded() {
+	if !t.TextSelected {
+		return
+	}
+	if in := t.focusedInput(); in != nil {
+		in.Reset()
+	}
+	t.clearSelection()
+}
+
+func (t *Tab) capture() fieldSnapshot {
+	return fieldSnapshot{
+		Host:         t.Host.Value(),
+		Port:         t.Port.Value(),
+		User:         t.User.Value(),
+		Secret:       t.Secret.Value(),
+		HostPos:      t.Host.Position(),
+		PortPos:      t.Port.Position(),
+		UserPos:      t.User.Position(),
+		SecretPos:    t.Secret.Position(),
+		Focus:        t.Focus,
+		TextSelected: t.TextSelected,
+	}
+}
+
+func (t *Tab) pushUndo() {
+	t.undo = append(t.undo, t.capture())
+	const maxUndo = 64
+	if len(t.undo) > maxUndo {
+		t.undo = t.undo[len(t.undo)-maxUndo:]
+	}
+}
+
+func (t *Tab) dropUndoIfUnchanged() {
+	if len(t.undo) == 0 {
+		return
+	}
+	last := t.undo[len(t.undo)-1]
+	if t.Host.Value() == last.Host &&
+		t.Port.Value() == last.Port &&
+		t.User.Value() == last.User &&
+		t.Secret.Value() == last.Secret {
+		t.undo = t.undo[:len(t.undo)-1]
+	}
+}
+
+func (t *Tab) undoLast() {
+	if len(t.undo) == 0 {
+		return
+	}
+	s := t.undo[len(t.undo)-1]
+	t.undo = t.undo[:len(t.undo)-1]
+	t.Host.SetValue(s.Host)
+	t.Port.SetValue(s.Port)
+	t.User.SetValue(s.User)
+	t.Secret.SetValue(s.Secret)
+	t.Host.SetCursor(s.HostPos)
+	t.Port.SetCursor(s.PortPos)
+	t.User.SetCursor(s.UserPos)
+	t.Secret.SetCursor(s.SecretPos)
+	t.Focus = s.Focus
+	t.TextSelected = s.TextSelected
+}
+
+func (t *Tab) closeSSH() {
+	if t.SSH == nil {
+		return
+	}
+	_ = t.SSH.Close()
+	t.SSH = nil
+}
+
 func (t *Tab) SetPassword(usePassword string) {
 	t.UsePassword = true
 	t.Secret.Placeholder = "password"
@@ -97,33 +294,6 @@ func (t *Tab) ApplyMethod() {
 	}
 }
 
-// syncFromSSH mirrors the ssh sub-model's state into the tab's own status
-// fields, so the tab bar dot and the form's status line stay correct even for
-// a session that's currently running in the background.
-func (t *Tab) syncFromSSH() {
-	switch {
-	case t.SSH.Connected():
-		t.Connected = true
-		t.Status = fmt.Sprintf("connected — %s@%s", t.User.Value(), t.Host.Value())
-		t.LastErr = nil
-	case t.Connected:
-		// Still dialing, or the connection just ended.
-		content := t.SSH.Content()
-		if strings.HasPrefix(content, "connecting") {
-			t.Status = content
-			return
-		}
-		t.Connected = false
-		if t.SSH.Err() != nil {
-			t.LastErr = t.SSH.Err()
-			t.Status = t.LastErr.Error()
-		} else {
-			t.LastErr = nil
-			t.Status = ""
-		}
-	}
-}
-
 func (t *Tab) methodLabel() string {
 	label := "publickey"
 	if t.UsePassword {
@@ -139,27 +309,6 @@ func (t *Tab) secretFieldLabel() string {
 		return "password"
 	}
 	return "key path"
-}
-
-// secretSummary is the one-line auth summary shown on the terminal screen.
-func (t *Tab) secretSummary() string {
-	if t.UsePassword {
-		return "password auth"
-	}
-	return "key: " + t.Secret.Value()
-}
-
-// target is the "user@host:port" line shown on the terminal screen.
-func (t *Tab) target() string {
-	host := t.Host.Value()
-	if host == "" {
-		host = "host"
-	}
-	user := t.User.Value()
-	if user == "" {
-		user = "user"
-	}
-	return user + "@" + host + ":" + t.Port.Value()
 }
 
 // GetTabLabel is what's shown in the tab strip — matches the design's

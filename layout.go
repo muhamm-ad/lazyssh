@@ -20,14 +20,15 @@ func (a *AppModel) panelInnerHeight() int {
 }
 
 func (a *AppModel) termSize() (cols, rows int) {
-	cols = a.panelInnerWidth()
-	rows = a.panelInnerHeight()
-	return cols, rows
+	return a.panelInnerWidth(), a.panelInnerHeight()
 }
 
 func (a *AppModel) fieldBoxWidth() int {
-	// return max(fieldChrome, a.panelInnerWidth()-labelColWidth-labelGap)
 	return max(HostCharLimit, PortCharLimit, UserCharLimit, SecretCharLimit) + fieldChrome + 1
+}
+
+func (a *AppModel) fieldInnerWidth() int {
+	return max(1, a.fieldBoxWidth()-fieldStyle.GetHorizontalFrameSize())
 }
 
 // syncInputWidths tells every tab's textinputs how many columns they actually
@@ -36,7 +37,7 @@ func (a *AppModel) fieldBoxWidth() int {
 // any of them can become active without another resize event happening
 // first), so every tab is kept in sync, not just the active one.
 func (a *AppModel) syncInputWidths() {
-	w := a.fieldBoxWidth()
+	w := a.fieldInnerWidth()
 	for i := range a.tabs {
 		t := &a.tabs[i]
 		t.Host.SetWidth(w)

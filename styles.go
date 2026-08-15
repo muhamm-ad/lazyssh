@@ -9,7 +9,9 @@
 package main
 
 import (
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 )
 
@@ -21,7 +23,6 @@ var (
 	dimFg    = lipgloss.Color("#5c5c5c")
 	statusFg = lipgloss.Color("#6b6b6b")
 	errFg    = lipgloss.Color("#ff8a80")
-	termFg   = lipgloss.Color("#4AFF75")
 
 	borderFg      = lipgloss.Color("#333333")
 	accentFg      = lipgloss.Color("#4AFF75")
@@ -33,8 +34,6 @@ var (
 	tabDotOn      = lipgloss.Color("#4AFF75")
 	tabDotOff     = lipgloss.Color("#4a4a4a")
 	tabCloseFg    = lipgloss.Color("#6b6b6b")
-
-	badgeBg = lipgloss.Color("#12291a")
 )
 
 var (
@@ -71,6 +70,8 @@ var (
 	focusedFieldStyle   = fieldStyle.BorderForeground(accentFg)
 	focusedConnectStyle = connectStyle.BorderForeground(accentFg)
 
+	selectedTextStyle = lipgloss.NewStyle().Foreground(termBg).Background(accentFg)
+
 	statusStyle = lipgloss.NewStyle().Foreground(dimFg)
 	errStyle    = lipgloss.NewStyle().Foreground(errFg)
 
@@ -100,11 +101,6 @@ var (
 	tabDotOnStyle  = lipgloss.NewStyle().Foreground(tabDotOn)
 	tabDotOffStyle = lipgloss.NewStyle().Foreground(tabDotOff)
 	tabCloseStyle  = lipgloss.NewStyle().Foreground(tabCloseFg)
-
-	connectedBadgeStyle = lipgloss.NewStyle().
-				Background(badgeBg).
-				Foreground(termFg).
-				Padding(0, 1)
 )
 
 func styleInput(m *textinput.Model) {
@@ -114,5 +110,10 @@ func styleInput(m *textinput.Model) {
 	s.Blurred.Text = lipgloss.NewStyle().Foreground(textFg)
 	s.Blurred.Placeholder = lipgloss.NewStyle().Foreground(dimFg)
 	s.Cursor.Color = accentFg
+	s.Cursor.Shape = tea.CursorBar
+	s.Cursor.Blink = true
 	m.SetStyles(s)
+	m.SetVirtualCursor(false)
+	// ctrl+a is select-all in the form, not "go to start of line".
+	m.KeyMap.LineStart = key.NewBinding(key.WithKeys("home"))
 }
