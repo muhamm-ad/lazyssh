@@ -18,7 +18,31 @@ func (a *AppModel) View() tea.View {
 	v.AltScreen = true
 	v.BackgroundColor = termBg
 	v.Cursor = a.formCursor()
+	if t := a.curentTab(); t.inSession() {
+		v.Cursor = a.terminalCursor()
+	}
 	return v
+}
+
+// terminalCursor places a hardware cursor at the live PTY's own cursor
+// position once a session is connected. Cursor() reports content-local
+// coordinates (0,0 at the top-left of the PTY content), so it's offset here
+// by everywhere that content sits on screen: past the tab bar, past the
+// panel's own border and padding, and past any header rows viewTerminal adds.
+func (a *AppModel) terminalCursor() *tea.Cursor {
+	t := a.curentTab()
+	if t.SSH == nil {
+		return nil
+	}
+	c := t.SSH.Cursor()
+	if c == nil {
+		return nil
+	}
+	dx := panelStyle.GetBorderLeftSize() + panelStyle.GetPaddingLeft()
+	dy := tabBarHeight + panelStyle.GetBorderTopSize() + panelStyle.GetPaddingTop()
+	c.Position.X += dx
+	c.Position.Y += dy
+	return c
 }
 
 func (a *AppModel) render() string {
@@ -135,7 +159,7 @@ func (a *AppModel) viewTab(t *Tab) string {
 // never resizes the window.
 func (a *AppModel) viewAppPanel(w int) string {
 	t := a.curentTab()
-	h := a.panelInnerHeight()
+	h := a.panelBoxHeight()
 
 	content := a.viewForm(t)
 	if t.inSession() {
@@ -214,8 +238,8 @@ func (a *AppModel) formCursor() *tea.Cursor {
 
 	form := a.viewForm(t)
 	formW, formH := lipgloss.Width(form), lipgloss.Height(form)
-	innerW := max(0, a.width-panelStyle.GetHorizontalFrameSize())
-	innerH := max(0, a.panelInnerHeight()-panelStyle.GetVerticalFrameSize())
+	innerW := a.panelInnerWidth()
+	innerH := a.panelInnerHeight()
 	formX := panelStyle.GetBorderLeftSize() + panelStyle.GetPaddingLeft() + max(0, (innerW-formW)/2)
 	formY := tabBarHeight + panelStyle.GetBorderTopSize() + panelStyle.GetPaddingTop() + max(0, (innerH-formH)/2)
 
@@ -277,9 +301,13 @@ func (a *AppModel) viewStatus(t *Tab) string {
 
 func (a *AppModel) viewTerminal(t *Tab) string {
 	cols, rows := a.termSize()
+	content := ""
+	if t.SSH != nil {
+		content = t.SSH.Content()
+	}
 	return termContentStyle.
 		Width(cols).Height(rows).
-		Render(t.SSH.Content())
+		Render(padBlock(content, cols, rows))
 }
 
 // viewAppStatusBar renders the status bar at the bottom of the app.
@@ -311,4 +339,22 @@ func clipBlock(s string, cols int) string {
 		return s
 	}
 	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
+}
+
+// padBlock ensures s fills exactly rows lines of width cols, so the
+// terminal panel doesn't jump when content is short.
+func padBlock(s string, cols, rows int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > rows {
+		lines = lines[:rows]
+	}
+	for len(lines) < rows {
+		lines = append(lines, "")
+	}
+	for i, line := range lines {
+		if lipgloss.Width(line) > cols {
+			lines[i] = lipgloss.NewStyle().MaxWidth(cols).Render(line)
+		}
+	}
+	return strings.Join(lines, "\n")
 }

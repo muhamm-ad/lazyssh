@@ -10,13 +10,21 @@ const (
 	labelGap      = 1
 )
 
+// panelBoxHeight is the content panel's outer box height: the vertical space
+// left between the tab bar and the help bar. panelStyle.Height sets the box's
+// total height (border and padding included).
+func (a *AppModel) panelBoxHeight() int {
+	return max(1, a.height-tabBarHeight-helpBarHeight)
+}
+
+// panelInnerWidth and panelInnerHeight are the content area inside
+// panelStyle's border and padding — what the form and the terminal render into.
 func (a *AppModel) panelInnerWidth() int {
-	panelChromeW := 2 + 2*2
-	return max(100, a.width-panelChromeW)
+	return max(100, a.width-panelStyle.GetHorizontalFrameSize())
 }
 
 func (a *AppModel) panelInnerHeight() int {
-	return max(20, a.height-tabBarHeight-helpBarHeight)
+	return max(20, a.panelBoxHeight()-panelStyle.GetVerticalFrameSize())
 }
 
 func (a *AppModel) termSize() (cols, rows int) {
