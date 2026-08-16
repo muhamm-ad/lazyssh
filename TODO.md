@@ -4,8 +4,7 @@
 
 - [ ] **Saved connection profiles.** The form re-filling itself with the last values already helps, but retyping a fresh server each time is still the main friction. Persist a small list of `{name, addr, user, method, key_path}` profiles to `~/.config/lazyssh/profiles.{json,yaml}` (no secrets stored — passwords still prompt live, only the non-secret fields are remembered). Add a profile picker as a third screen, reachable before the form: arrow keys to pick, enter to load it into the form pre-filled, `n` for a blank new one.
 
-- [ ] **Passphrase-protected keys.** `WithPrivateKeyFile` already supports a passphrase — the form just never asks for one. Add a 6th field, only shown
-when method is "key", using the same masked `textinput.EchoPassword` as the password field.
+- [ ] **Passphrase-protected keys.** `WithPrivateKeyFile` already supports a passphrase — the form just never asks for one. Add a 6th field, only shown when method is "key", using the same masked `textinput.EchoPassword` as the password field.
 
 - [ ] **`ssh-agent` as a method option.** `bubblessh.WithAgent()` exists and works today; the form's method toggle just doesn't offer it. Cycle password → key → agent instead of a binary toggle, hide the secret field entirely when agent is selected (nothing to type).
 
@@ -26,7 +25,4 @@ when method is "key", using the same masked `textinput.EchoPassword` as the pass
   - [ ] Keybindings — remappable shortcuts instead of the hardcoded help map
   - [ ] About — version, license blurb, sponsor / support links
   
-- [ ] **Session logging.** Write a session's `Content()` output to a file for later review. Needs a decision on rotation/redaction (a logged session can
-easily contain a password typed at a remote prompt) before this is safe to ship casually.
-
-- [ ] **Distribution polish.** `-version`/`-h` flags, a Homebrew tap, a Scoop manifest for Windows. Only worth it once there's something worth distributing beyond `go install`.
+- [ ] **Session logging.** Write a session's `Content()` output to a file for later review. Needs a decision on rotation/redaction (a logged session can easily contain a password typed at a remote prompt) before this is safe to ship casually.

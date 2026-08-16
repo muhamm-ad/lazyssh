@@ -22,6 +22,7 @@ go run .
 
 ```bash
 lazyssh
+lazyssh -version   # or -v
 ```
 
 ### Host Keys

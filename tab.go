@@ -42,9 +42,9 @@ type Tab struct {
 }
 
 type termSelection struct {
-	on       bool
-	ax, ay   int
-	bx, by   int
+	on     bool
+	ax, ay int
+	bx, by int
 }
 
 type fieldSnapshot struct {
