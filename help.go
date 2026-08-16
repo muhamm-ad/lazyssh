@@ -47,6 +47,18 @@ var helpCategories = []helpCategory{
 		title: "Session",
 		entries: []helpEntry{
 			{"exit", "leave the remote shell and return to the form"},
+			{"ctrl+c", "copy selection"},
+		},
+	},
+	{
+		title: "Mouse",
+		entries: []helpEntry{
+			{"click (tab)", "select / close / add a tab"},
+			{"wheel (tab bar)", "scroll tabs horizontally"},
+			{"click (form)", "focus a field or connect"},
+			{"drag (field)", "select text in a field"},
+			{"wheel (terminal)", "scroll terminal history"},
+			{"drag (terminal)", "select terminal text"},
 		},
 	},
 }

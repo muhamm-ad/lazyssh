@@ -33,7 +33,17 @@ type Tab struct {
 
 	Status       string
 	TextSelected bool
-	undo         []fieldSnapshot
+	selStart     int
+	selEnd       int
+
+	termSel termSelection
+	undo    []fieldSnapshot
+}
+
+type termSelection struct {
+	on       bool
+	ax, ay   int
+	bx, by   int
 }
 
 type fieldSnapshot struct {
@@ -41,6 +51,7 @@ type fieldSnapshot struct {
 	HostPos, PortPos, UserPos, SecretPos int
 	Focus                                int
 	TextSelected                         bool
+	selStart, selEnd                     int
 }
 
 const (
@@ -213,21 +224,49 @@ func (t *Tab) secretLocked() bool {
 }
 
 func (t *Tab) selectAllFocused() {
-	if t.focusedInput() == nil {
+	in := t.focusedInput()
+	if in == nil {
 		return
 	}
-	t.TextSelected = true
+	t.selStart = 0
+	t.selEnd = len([]rune(in.Value()))
+	t.TextSelected = t.selStart != t.selEnd
+}
+
+func (t *Tab) selectedRange() (lo, hi int, ok bool) {
+	if !t.TextSelected {
+		return 0, 0, false
+	}
+	lo, hi = t.selStart, t.selEnd
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return lo, hi, lo != hi
+}
+
+func (t *Tab) selectedText() string {
+	if t.secretLocked() {
+		return ""
+	}
+	in := t.focusedInput()
+	if in == nil {
+		return ""
+	}
+	runes := []rune(in.Value())
+	lo, hi, ok := t.selectedRange()
+	if !ok {
+		return in.Value()
+	}
+	lo = max(0, min(lo, len(runes)))
+	hi = max(0, min(hi, len(runes)))
+	return string(runes[lo:hi])
 }
 
 func (t *Tab) copyFocused() {
 	if t.secretLocked() {
 		return
 	}
-	in := t.focusedInput()
-	if in == nil {
-		return
-	}
-	_ = clipboard.WriteAll(in.Value())
+	_ = clipboard.WriteAll(t.selectedText())
 }
 
 func (t *Tab) cutFocused() {
@@ -239,23 +278,35 @@ func (t *Tab) cutFocused() {
 		return
 	}
 	t.pushUndo()
-	_ = clipboard.WriteAll(in.Value())
-	in.Reset()
-	t.clearSelection()
+	_ = clipboard.WriteAll(t.selectedText())
+	t.deleteSelected()
 }
 
 func (t *Tab) clearSelection() {
 	t.TextSelected = false
+	t.selStart, t.selEnd = 0, 0
+}
+
+func (t *Tab) deleteSelected() {
+	in := t.focusedInput()
+	lo, hi, ok := t.selectedRange()
+	if in == nil || !ok {
+		t.clearSelection()
+		return
+	}
+	runes := []rune(in.Value())
+	lo = max(0, min(lo, len(runes)))
+	hi = max(0, min(hi, len(runes)))
+	in.SetValue(string(append(append([]rune{}, runes[:lo]...), runes[hi:]...)))
+	in.SetCursor(lo)
+	t.clearSelection()
 }
 
 func (t *Tab) replaceSelectedIfNeeded() {
 	if !t.TextSelected {
 		return
 	}
-	if in := t.focusedInput(); in != nil {
-		in.Reset()
-	}
-	t.clearSelection()
+	t.deleteSelected()
 }
 
 func (t *Tab) capture() fieldSnapshot {
@@ -270,6 +321,8 @@ func (t *Tab) capture() fieldSnapshot {
 		SecretPos:    t.Secret.Position(),
 		Focus:        t.Focus,
 		TextSelected: t.TextSelected,
+		selStart:     t.selStart,
+		selEnd:       t.selEnd,
 	}
 }
 
@@ -310,6 +363,8 @@ func (t *Tab) undoLast() {
 	t.Secret.SetCursor(s.SecretPos)
 	t.Focus = s.Focus
 	t.TextSelected = s.TextSelected
+	t.selStart = s.selStart
+	t.selEnd = s.selEnd
 }
 
 func (t *Tab) closeSSH() {

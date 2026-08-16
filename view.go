@@ -18,8 +18,9 @@ func (a *AppModel) View() tea.View {
 	v := tea.NewView(a.render())
 	v.AltScreen = true
 	v.BackgroundColor = termBg
+	v.MouseMode = tea.MouseModeCellMotion
 	v.Cursor = a.formCursor()
-	if t := a.curentTab(); t.inSession() && !a.focusAdd {
+	if t := a.curentTab(); t.inSession() && !a.focusAdd && !t.hasTermSelection() {
 		v.Cursor = a.terminalCursor()
 	}
 	return v
@@ -98,8 +99,25 @@ func (a *AppModel) connectedCount() int {
 }
 
 func (a *AppModel) viewHelpModal() string {
-	rows := []string{dialogTitleStyle.Render("Help"), ""}
-	for i, cat := range helpCategories {
+	left := renderHelpColumn(helpCategories[:3])
+	right := renderHelpColumn(helpCategories[3:])
+	gap := strings.Repeat(" ", 4)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, left, gap, right)
+
+	return dialogStyle.
+		Align(lipgloss.Left).
+		Render(lipgloss.JoinVertical(lipgloss.Left,
+			dialogTitleStyle.Render("Help"),
+			"",
+			body,
+			"",
+			dialogKeyStyle.Render("esc / ctrl+h  close"),
+		))
+}
+
+func renderHelpColumn(cats []helpCategory) string {
+	rows := make([]string, 0, 32)
+	for i, cat := range cats {
 		if i > 0 {
 			rows = append(rows, "")
 		}
@@ -111,11 +129,7 @@ func (a *AppModel) viewHelpModal() string {
 			))
 		}
 	}
-	rows = append(rows, "", dialogKeyStyle.Render("esc / ctrl+h  close"))
-
-	return dialogStyle.
-		Align(lipgloss.Left).
-		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
 // viewAppTabBar renders one small rounded box per tab (dot + label + close glyph),
@@ -123,6 +137,29 @@ func (a *AppModel) viewHelpModal() string {
 // strip is wider than the window the tabs scroll horizontally so the active
 // tab stays fully in view; the "+" stays pinned on the right.
 func (a *AppModel) viewAppTabBar(w int) string {
+	addStyle := addTabStyle
+	if a.focusAdd {
+		addStyle = activeTabStyle
+	}
+	add := addStyle.Render("+")
+	strip := a.measureTabStrip()
+	tabsW := max(0, w-strip.addW)
+	offset := max(0, min(a.tabBarScroll, max(0, strip.contentW-tabsW)))
+	tabs := scrollBlock(strip.content, offset, tabsW)
+
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, tabs, " ", add)
+	return lineStyle.Width(w).Render(tabBar)
+}
+
+type tabStrip struct {
+	starts   []int
+	widths   []int
+	content  string
+	contentW int
+	addW     int // leading gap + "+" box
+}
+
+func (a *AppModel) measureTabStrip() tabStrip {
 	parts := make([]string, 0, len(a.tabs)*2)
 	starts := make([]int, len(a.tabs))
 	widths := make([]int, len(a.tabs))
@@ -138,21 +175,32 @@ func (a *AppModel) viewAppTabBar(w int) string {
 		x += widths[i]
 		parts = append(parts, tab)
 	}
-
-	addStyle := addTabStyle
-	if a.focusAdd {
-		addStyle = activeTabStyle
+	content := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
+	addW := 1 + lipgloss.Width(addTabStyle.Render("+"))
+	return tabStrip{
+		starts:   starts,
+		widths:   widths,
+		content:  content,
+		contentW: lipgloss.Width(content),
+		addW:     addW,
 	}
-	add := addStyle.Render("+")
-	addW := 1 + lipgloss.Width(add) // leading gap + button
-	tabsW := max(0, w-addW)
-	tabs := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
-	idx := a.currentTabIndex()
-	offset := tabBarOffset(starts[idx], starts[idx]+widths[idx], lipgloss.Width(tabs), tabsW)
-	tabs = scrollBlock(tabs, offset, tabsW)
+}
 
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, tabs, " ", add)
-	return lineStyle.Width(w).Render(tabBar)
+func (a *AppModel) clampTabBarScroll() {
+	strip := a.measureTabStrip()
+	tabsW := max(0, a.width-strip.addW)
+	a.tabBarScroll = max(0, min(a.tabBarScroll, max(0, strip.contentW-tabsW)))
+}
+
+func (a *AppModel) ensureActiveTabVisible() {
+	if a.focusAdd {
+		a.clampTabBarScroll()
+		return
+	}
+	strip := a.measureTabStrip()
+	tabsW := max(0, a.width-strip.addW)
+	idx := a.currentTabIndex()
+	a.tabBarScroll = tabBarOffset(strip.starts[idx], strip.starts[idx]+strip.widths[idx], strip.contentW, tabsW)
 }
 
 // tabBarOffset is the leftmost column of the tab strip to show so [tabStart,
@@ -236,7 +284,8 @@ func (a *AppModel) fieldRow(label string, in *textinput.Model, focused, selected
 	inner := a.fieldInnerWidth()
 	value := in.View()
 	if selected && in.Value() != "" {
-		value = selectedTextStyle.Render(echoedValue(*in))
+		t := a.curentTab()
+		value = highlightRange(echoedValue(*in), t.selStart, t.selEnd)
 	}
 	box := style.Width(a.fieldBoxWidth()).Render(clipLine(value, inner))
 	return lipgloss.JoinHorizontal(lipgloss.Center,
@@ -345,9 +394,13 @@ func (a *AppModel) viewTerminal(t *Tab) string {
 	if t.SSH != nil {
 		content = t.SSH.Content()
 	}
+	content = padBlock(content, cols, rows)
+	if t.hasTermSelection() {
+		content = highlightTermSelection(content, t.termSel, cols)
+	}
 	return termContentStyle.
 		Width(cols).Height(rows).
-		Render(padBlock(content, cols, rows))
+		Render(content)
 }
 
 // viewAppStatusBar renders the status bar at the bottom of the app.

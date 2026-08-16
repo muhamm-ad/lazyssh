@@ -25,6 +25,9 @@ type AppModel struct {
 	showHelp    bool // the help modal is up and owns the keyboard
 	focusAdd    bool // the tab-bar "+" is selected (ctrl+←/→), enter adds a tab
 
+	tabBarScroll  int // horizontal offset of the tab strip, in cells
+	fieldDragging bool
+	termDragging  bool
 	width, height int
 }
 
@@ -56,6 +59,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		a.syncInputWidths()
+		a.clampTabBarScroll()
 		return a, a.resizeAll()
 
 	case tea.KeyPressMsg:
@@ -67,7 +71,10 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, a.updateForm(msg)
 
-	case tea.PasteMsg, tea.MouseMsg:
+	case tea.MouseMsg:
+		return a, a.handleMouse(msg)
+
+	case tea.PasteMsg:
 		if a.focusAdd {
 			return a, nil
 		}
@@ -120,6 +127,10 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		return a.openHelp(), true
 	case key.String() == "ctrl+t":
 		return a.addTab(), true
+	case key.String() == "ctrl+c":
+		if a.copyTermSelection() {
+			return nil, true
+		}
 	case key.String() == "ctrl+w":
 		if a.focusAdd {
 			return nil, true
@@ -372,6 +383,7 @@ func (a *AppModel) addTab() tea.Cmd {
 	a.active = t.ID
 	a.focusAdd = false
 	a.syncInputWidths()
+	a.ensureActiveTabVisible()
 	return a.focusCurrent()
 }
 
@@ -400,14 +412,17 @@ func (a *AppModel) closeTab(id int) tea.Cmd {
 		a.tabs = []Tab{t}
 		a.active = t.ID
 		a.focusAdd = false
+		a.ensureActiveTabVisible()
 		return a.focusCurrent()
 	}
 
 	if !wasActive {
+		a.clampTabBarScroll()
 		return nil
 	}
 	next := min(idx, len(a.tabs)-1)
 	a.active = a.tabs[next].ID
+	a.ensureActiveTabVisible()
 	if a.curentTab().inSession() {
 		return nil
 	}
@@ -432,6 +447,7 @@ func (a *AppModel) switchTab(delta int) tea.Cmd {
 	}
 	a.focusAdd = false
 	a.active = a.tabs[pos].ID
+	a.ensureActiveTabVisible()
 	if a.curentTab().inSession() {
 		return nil
 	}

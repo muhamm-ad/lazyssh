@@ -87,7 +87,7 @@ var (
 	dialogKeyStyle   = lipgloss.NewStyle().Foreground(dimFg)
 
 	helpCategoryStyle = lipgloss.NewStyle().Foreground(accentFg).Bold(true)
-	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(18)
+	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(22)
 	helpDescStyle     = lipgloss.NewStyle().Foreground(dimFg)
 
 	tabStyle = lipgloss.NewStyle().
