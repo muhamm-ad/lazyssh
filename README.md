@@ -30,7 +30,7 @@ Host keys are trusted on first connection and remembered in your normal `~/.ssh/
 
 ## What this is (and isn't) today
 
-v0 is intentionally small: multi-tab sessions, nothing saved between runs, password or key file only. That's not the ceiling — see [TODO.md](./TODO.md) for what's planned, roughly in priority order. Saved connection profiles are the top of that list.
+v0 is intentionally small: multi-tab sessions, nothing saved between runs, password or key file only. That's not the ceiling — see [TODO.md](./TODO.md) for what's planned.
 
 ## License
 
