@@ -23,6 +23,7 @@ type AppModel struct {
 
 	confirmQuit bool // the quit dialog is up and owns the keyboard
 	showHelp    bool // the help modal is up and owns the keyboard
+	focusAdd    bool // the tab-bar "+" is selected (ctrl+←/→), enter adds a tab
 
 	width, height int
 }
@@ -67,6 +68,9 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.updateForm(msg)
 
 	case tea.PasteMsg, tea.MouseMsg:
+		if a.focusAdd {
+			return a, nil
+		}
 		if a.curentTab().inSession() {
 			return a, a.updateTerminal(msg)
 		}
@@ -117,6 +121,9 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 	case key.String() == "ctrl+t":
 		return a.addTab(), true
 	case key.String() == "ctrl+w":
+		if a.focusAdd {
+			return nil, true
+		}
 		return a.closeTab(a.active), true
 	case key.String() == "ctrl+right":
 		return a.nextTab(), true
@@ -125,6 +132,10 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 	case key.String() == "ctrl+q":
 		a.confirmQuit = true
 		a.blurAll()
+		return nil, true
+	case a.focusAdd && key.String() == "enter":
+		return a.addTab(), true
+	case a.focusAdd:
 		return nil, true
 	}
 	return nil, false
@@ -359,6 +370,7 @@ func (a *AppModel) addTab() tea.Cmd {
 	a.nextID++
 	a.tabs = append(a.tabs, t)
 	a.active = t.ID
+	a.focusAdd = false
 	a.syncInputWidths()
 	return a.focusCurrent()
 }
@@ -387,6 +399,7 @@ func (a *AppModel) closeTab(id int) tea.Cmd {
 		a.nextID++
 		a.tabs = []Tab{t}
 		a.active = t.ID
+		a.focusAdd = false
 		return a.focusCurrent()
 	}
 
@@ -405,11 +418,20 @@ func (a *AppModel) nextTab() tea.Cmd { return a.switchTab(1) }
 func (a *AppModel) prevTab() tea.Cmd { return a.switchTab(-1) }
 
 func (a *AppModel) switchTab(delta int) tea.Cmd {
-	if len(a.tabs) < 2 {
+	n := len(a.tabs)
+	// One slot per tab, plus the trailing "+" in the tab bar.
+	pos := n
+	if !a.focusAdd {
+		pos = a.currentTabIndex()
+	}
+	pos = (pos + delta + n + 1) % (n + 1)
+	if pos == n {
+		a.focusAdd = true
+		a.blurAll()
 		return nil
 	}
-	idx := (a.currentTabIndex() + delta + len(a.tabs)) % len(a.tabs)
-	a.active = a.tabs[idx].ID
+	a.focusAdd = false
+	a.active = a.tabs[pos].ID
 	if a.curentTab().inSession() {
 		return nil
 	}

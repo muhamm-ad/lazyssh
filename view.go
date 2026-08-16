@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (a *AppModel) View() tea.View {
@@ -18,7 +19,7 @@ func (a *AppModel) View() tea.View {
 	v.AltScreen = true
 	v.BackgroundColor = termBg
 	v.Cursor = a.formCursor()
-	if t := a.curentTab(); t.inSession() {
+	if t := a.curentTab(); t.inSession() && !a.focusAdd {
 		v.Cursor = a.terminalCursor()
 	}
 	return v
@@ -118,24 +119,63 @@ func (a *AppModel) viewHelpModal() string {
 }
 
 // viewAppTabBar renders one small rounded box per tab (dot + label + close glyph),
-// plus a trailing "+" box — the browser-tab strip from the design.
+// plus a trailing "+" box — the browser-tab strip from the design. When the
+// strip is wider than the window the tabs scroll horizontally so the active
+// tab stays fully in view; the "+" stays pinned on the right.
 func (a *AppModel) viewAppTabBar(w int) string {
-	parts := make([]string, 0, len(a.tabs)*2+2)
+	parts := make([]string, 0, len(a.tabs)*2)
+	starts := make([]int, len(a.tabs))
+	widths := make([]int, len(a.tabs))
+	x := 0
 	for i := range a.tabs {
 		if i > 0 {
 			parts = append(parts, " ")
+			x++
 		}
-		parts = append(parts, a.viewTab(&a.tabs[i]))
+		tab := a.viewTab(&a.tabs[i])
+		starts[i] = x
+		widths[i] = lipgloss.Width(tab)
+		x += widths[i]
+		parts = append(parts, tab)
 	}
-	parts = append(parts, " ", addTabStyle.Render("+"))
 
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
-	return lineStyle.Width(w).Render(clipBlock(tabBar, w))
+	addStyle := addTabStyle
+	if a.focusAdd {
+		addStyle = activeTabStyle
+	}
+	add := addStyle.Render("+")
+	addW := 1 + lipgloss.Width(add) // leading gap + button
+	tabsW := max(0, w-addW)
+	tabs := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
+	idx := a.currentTabIndex()
+	offset := tabBarOffset(starts[idx], starts[idx]+widths[idx], lipgloss.Width(tabs), tabsW)
+	tabs = scrollBlock(tabs, offset, tabsW)
+
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, tabs, " ", add)
+	return lineStyle.Width(w).Render(tabBar)
+}
+
+// tabBarOffset is the leftmost column of the tab strip to show so [tabStart,
+// tabEnd) sits inside a viewport of viewW. Prefers keeping the active tab's
+// right edge visible when it would otherwise hang off the right.
+func tabBarOffset(tabStart, tabEnd, contentW, viewW int) int {
+	if contentW <= viewW || viewW <= 0 {
+		return 0
+	}
+	maxOff := contentW - viewW
+	off := 0
+	if tabEnd > viewW {
+		off = tabEnd - viewW
+	}
+	if tabStart < off {
+		off = tabStart
+	}
+	return max(0, min(off, maxOff))
 }
 
 func (a *AppModel) viewTab(t *Tab) string {
 	style, dot := tabStyle, tabDotOffStyle
-	if t.ID == a.active {
+	if t.ID == a.active && !a.focusAdd {
 		style = activeTabStyle
 	}
 	if t.inSession() {
@@ -220,7 +260,7 @@ func echoedValue(in textinput.Model) string {
 
 // formCursor places a real bar cursor inside the focused form field.
 func (a *AppModel) formCursor() *tea.Cursor {
-	if a.confirmQuit || a.showHelp {
+	if a.confirmQuit || a.showHelp || a.focusAdd {
 		return nil
 	}
 	t := a.curentTab()
@@ -334,11 +374,34 @@ func clipLine(s string, cols int) string {
 
 // clipBlock clamps every line of a possibly multi-line block to cols cells,
 // unlike clipLine it never drops lines after the first
-func clipBlock(s string, cols int) string {
-	if lipgloss.Width(s) <= cols {
-		return s
+// func clipBlock(s string, cols int) string {
+// 	if lipgloss.Width(s) <= cols {
+// 		return s
+// 	}
+// 	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
+// }
+
+// scrollBlock windows every line of a possibly multi-line block to cols cells
+// starting at offset, ANSI-aware so tab borders and colors survive the cut.
+func scrollBlock(s string, offset, cols int) string {
+	if cols <= 0 {
+		return ""
 	}
-	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
+	if offset < 0 {
+		offset = 0
+	}
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		width := lipgloss.Width(line)
+		off := offset
+		if width <= cols {
+			off = 0
+		} else if off > width-cols {
+			off = width - cols
+		}
+		lines[i] = ansi.Cut(line, off, off+cols)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // padBlock ensures s fills exactly rows lines of width cols, so the

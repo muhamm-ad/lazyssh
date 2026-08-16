@@ -26,7 +26,8 @@ var helpCategories = []helpCategory{
 		entries: []helpEntry{
 			{"ctrl+t", "open a new tab"},
 			{"ctrl+w", "close the active tab"},
-			{"ctrl+← / ctrl+→", "switch tabs"},
+			{"ctrl+← / ctrl+→", "switch tabs (includes +)"},
+			{"enter (on +)", "open a new tab"},
 		},
 	},
 	{
