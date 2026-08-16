@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -108,14 +109,58 @@ func (t *Tab) statusText() string {
 			return fmt.Sprintf("connected — %s@%s", t.User.Value(), t.Host.Value())
 		}
 		if t.Status != "" {
-			return t.Status
+			return friendlyError(t.Status)
 		}
 		if err := t.SSH.Err(); err != nil && err != io.EOF {
-			return err.Error()
+			return friendlyError(err.Error())
 		}
 		return ""
 	}
+	if t.Status != "" && !t.inSession() {
+		return friendlyError(t.Status)
+	}
 	return t.Status
+}
+
+// friendlyError turns a raw SSH / network error into a short line the form
+// can show. The original text is often a wrapped stdlib dump; this keeps the
+// cause and drops the rest.
+func friendlyError(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	low := strings.ToLower(s)
+	switch {
+	case strings.Contains(low, "invalid port"):
+		return s
+	case strings.Contains(low, "no such host"), strings.Contains(low, "server misbehaving"):
+		return "host not found — check the address"
+	case strings.Contains(low, "connection refused"):
+		return "connection refused — check host and port"
+	case strings.Contains(low, "i/o timeout"), strings.Contains(low, "deadline exceeded"), strings.Contains(low, "timed out"):
+		return "connection timed out"
+	case strings.Contains(low, "network is unreachable"), strings.Contains(low, "no route to host"):
+		return "network unreachable"
+	case strings.Contains(low, "connection reset"):
+		return "connection reset by the remote host"
+	case strings.Contains(low, "knownhosts"), strings.Contains(low, "key mismatch"), strings.Contains(low, "remote host identification"):
+		return "host key changed — check known_hosts"
+	case strings.Contains(low, "unable to authenticate"), strings.Contains(low, "no supported methods remain"), strings.Contains(low, "permission denied"):
+		return "authentication failed — check user, key, or password"
+	case strings.Contains(low, "passphrase"):
+		return "this key needs a passphrase"
+	case strings.Contains(low, "no such file"), strings.Contains(low, "cannot find the file"):
+		return "key file not found"
+	case strings.Contains(low, "unable to parse"), strings.Contains(low, "parse private key"), strings.Contains(low, "ssh: this private key"):
+		return "couldn't read the private key"
+	case strings.Contains(low, "handshake"):
+		return "SSH handshake failed"
+	default:
+		s = strings.TrimPrefix(s, "ssh: ")
+		s = strings.TrimPrefix(s, "ssh error: ")
+		return s
+	}
 }
 
 func (t *Tab) statusIsError() bool {

@@ -39,6 +39,10 @@ func (a *AppModel) fieldInnerWidth() int {
 	return max(1, a.fieldBoxWidth()-fieldStyle.GetHorizontalFrameSize())
 }
 
+func (a *AppModel) formWidth() int {
+	return labelColWidth + labelGap + a.fieldBoxWidth()
+}
+
 // syncInputWidths tells every tab's textinputs how many columns they actually
 // got, so a value longer than its box scrolls inside it instead of wrapping.
 // All tabs share the same geometry (only the active one is ever drawn, but

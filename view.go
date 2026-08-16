@@ -322,7 +322,7 @@ func (a *AppModel) connectRow(t *Tab) string {
 	if t.Focus == fieldConnect {
 		style = focusedConnectStyle
 	}
-	formW := labelColWidth + labelGap + a.fieldBoxWidth()
+	formW := a.formWidth()
 	return lineStyle.Width(formW).Align(lipgloss.Center).Render(style.Render("Connect"))
 }
 
@@ -335,8 +335,8 @@ func (a *AppModel) viewStatus(t *Tab) string {
 	if t.statusIsError() {
 		style = errStyle
 	}
-	w := a.panelInnerWidth()
-	return style.Width(w).Render(clipLine(s, w))
+	w := a.formWidth()
+	return style.Width(w).Align(lipgloss.Center).Render(s)
 }
 
 func (a *AppModel) viewTerminal(t *Tab) string {
@@ -371,15 +371,6 @@ func clipLine(s string, cols int) string {
 	}
 	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
 }
-
-// clipBlock clamps every line of a possibly multi-line block to cols cells,
-// unlike clipLine it never drops lines after the first
-// func clipBlock(s string, cols int) string {
-// 	if lipgloss.Width(s) <= cols {
-// 		return s
-// 	}
-// 	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
-// }
 
 // scrollBlock windows every line of a possibly multi-line block to cols cells
 // starting at offset, ANSI-aware so tab borders and colors survive the cut.
