@@ -49,7 +49,7 @@ func (a *AppModel) terminalCursor() *tea.Cursor {
 
 func (a *AppModel) render() string {
 	tabBar := a.viewAppTabBar(a.width)
-	panel := a.viewAppPanel(a.width)
+	panel := a.renderAlertInPanel(a.viewAppPanel(a.width))
 	help := a.viewAppStatusBar(a.width)
 	page := lipgloss.JoinVertical(lipgloss.Left, tabBar, panel, help)
 	switch {
@@ -60,6 +60,20 @@ func (a *AppModel) render() string {
 	default:
 		return page
 	}
+}
+
+// renderAlertInPanel overlays BubbleUp on the content panel only (not the tab
+// bar or help strip), bottom-centered with alertBottomPad rows kept clear
+// above the panel's bottom edge.
+func (a *AppModel) renderAlertInPanel(panel string) string {
+	lines := strings.Split(panel, "\n")
+	pad := alertBottomPad
+	if pad <= 0 || len(lines) <= pad {
+		return a.alert.Render(panel)
+	}
+	head := strings.Join(lines[:len(lines)-pad], "\n")
+	tail := strings.Join(lines[len(lines)-pad:], "\n")
+	return lipgloss.JoinVertical(lipgloss.Left, a.alert.Render(head), tail)
 }
 
 func centerOver(page, modal string, w int, h int) string {
@@ -257,11 +271,7 @@ func (a *AppModel) viewAppPanel(w int) string {
 }
 
 func (a *AppModel) viewForm(t *Tab) string {
-	rows := a.formRows(t)
-	if status := a.viewStatus(t); status != "" {
-		rows = append(rows, "", status)
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	return lipgloss.JoinVertical(lipgloss.Left, a.formRows(t)...)
 }
 
 func (a *AppModel) formRows(t *Tab) []string {
@@ -373,19 +383,6 @@ func (a *AppModel) connectRow(t *Tab) string {
 	}
 	formW := a.formWidth()
 	return lineStyle.Width(formW).Align(lipgloss.Center).Render(style.Render("Connect"))
-}
-
-func (a *AppModel) viewStatus(t *Tab) string {
-	s := t.statusText()
-	if s == "" {
-		return ""
-	}
-	style := statusStyle
-	if t.statusIsError() {
-		style = errStyle
-	}
-	w := a.formWidth()
-	return style.Width(w).Align(lipgloss.Center).Render(s)
 }
 
 func (a *AppModel) viewTerminal(t *Tab) string {

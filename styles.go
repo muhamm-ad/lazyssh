@@ -22,7 +22,6 @@ var (
 	mutedFg  = lipgloss.Color("#8a8a8a")
 	dimFg    = lipgloss.Color("#5c5c5c")
 	statusFg = lipgloss.Color("#6b6b6b")
-	errFg    = lipgloss.Color("#ff8a80")
 
 	borderFg      = lipgloss.Color("#333333")
 	accentFg      = lipgloss.Color("#4AFF75")
@@ -71,9 +70,6 @@ var (
 	focusedConnectStyle = connectStyle.BorderForeground(accentFg)
 
 	selectedTextStyle = lipgloss.NewStyle().Foreground(termBg).Background(accentFg)
-
-	statusStyle = lipgloss.NewStyle().Foreground(dimFg)
-	errStyle    = lipgloss.NewStyle().Foreground(errFg)
 
 	termContentStyle = lipgloss.NewStyle().Foreground(dimFg)
 

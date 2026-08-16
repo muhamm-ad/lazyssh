@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -35,6 +34,8 @@ type Tab struct {
 	TextSelected bool
 	selStart     int
 	selEnd       int
+	lastNotified string // last BubbleUp message fired for this tab
+	wasLive      bool   // previous inSession() — detects disconnect edges
 
 	termSel termSelection
 	undo    []fieldSnapshot
@@ -113,12 +114,12 @@ func (t *Tab) inSession() bool {
 // while connecting). Prefers a form-level Status when the session is not live.
 func (t *Tab) statusText() string {
 	if t.SSH != nil {
-		switch t.SSH.State() {
-		case bubblessh.StateConnecting:
-			return "connecting…"
-		case bubblessh.StateConnected:
-			return fmt.Sprintf("connected — %s@%s", t.User.Value(), t.Host.Value())
-		}
+		// switch t.SSH.State() {
+		// case bubblessh.StateConnecting:
+		// 	return "connecting…"
+		// case bubblessh.StateConnected:
+		// 	return fmt.Sprintf("connected — %s@%s", t.User.Value(), t.Host.Value())
+		// }
 		if t.Status != "" {
 			return friendlyError(t.Status)
 		}
