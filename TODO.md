@@ -11,7 +11,7 @@ when method is "key", using the same masked `textinput.EchoPassword` as the pass
 
 ## P2 — worth doing, less urgent
 
-- [ ] **Polish Status and Notification.** Use https://github.com/DaltonSW/BubbleUp to show status and notifications.
+- [ ] **Polish Status and Notification.** Use <https://github.com/DaltonSW/BubbleUp> to show status and notifications.
 
 - [ ] **Host key policy as a real choice, not a silent default.** Right now every connection silently uses `WithAcceptNewHostKeys` against the default `~/.ssh/known_hosts`. Surface this as an explicit, visible setting — strict / accept-new / insecure — at least in a config file if not in the form itself, so the trade-off is a decision the user made, not one made for them.
 
@@ -19,9 +19,14 @@ when method is "key", using the same masked `textinput.EchoPassword` as the pass
 
 ## P3 — someday, only if there's real demand
 
+- [ ] **Settings page.** A dedicated in-app screen (not just a config file) for preferences and about info (Worth doing only once there's enough knobs that a file alone feels hostile; until then individual features can land without the page). Rough surface:
+  - [ ] Mouse — enable/disable forwarding (`bubblessh.WithMouseForwarding()`), useful for remote TUIs like vim/tmux
+  - [ ] Theming — pull the hardcoded lipgloss colors in `styles.go` into a `Theme` struct with a couple of presets the user can pick
+  - [ ] Notifications — toggle / configure status toasts (e.g. BubbleUp)
+  - [ ] Keybindings — remappable shortcuts instead of the hardcoded help map
+  - [ ] About — version, license blurb, sponsor / support links
+  
 - [ ] **Session logging.** Write a session's `Content()` output to a file for later review. Needs a decision on rotation/redaction (a logged session can
 easily contain a password typed at a remote prompt) before this is safe to ship casually.
-
-- [ ] **Theming.** The lipgloss colors in `styles.go` are hardcoded. Pulling them into a small `Theme` struct with a couple of presets is easy; deciding it's worth the surface area to maintain is the actual open question.
 
 - [ ] **Distribution polish.** `-version`/`-h` flags, a Homebrew tap, a Scoop manifest for Windows. Only worth it once there's something worth distributing beyond `go install`.
