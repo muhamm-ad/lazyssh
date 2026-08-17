@@ -1,5 +1,9 @@
 # lazyssh
 
+<p align="center">
+  <img src="lazyssh.gif" alt="lazyssh demo" />
+</p>
+
 A small, full-screen SSH client with browser-style tabs. Fill in a server, hit Connect, and you're in — no config file, no flags to remember. Open more tabs for more sessions; background tabs keep running while you work in another.
 
 Built on [`bubble-ssh`](https://github.com/muhamm-ad/bubble-ssh), which does the actual SSH-session-as-a-Bubble-Tea-component work; `lazyssh` is the form, tabs, and chrome wrapped around it.

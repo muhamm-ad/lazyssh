@@ -571,10 +571,11 @@ func (a *AppModel) viewTerminal(t *Tab) string {
 // viewAppStatusBar renders the status bar at the bottom of the app.
 func (a *AppModel) viewAppStatusBar(w int) string {
 	leftInfo := "ctrl+h — show help"
-	rightInfo := fmt.Sprintf("Window size: %dx%d", a.width, a.height)
+	// rightInfo := fmt.Sprintf("Window size: %dx%d", a.width, a.height)
 	padding := 1
-	gap := max(1, w-lipgloss.Width(leftInfo)-lipgloss.Width(rightInfo)-padding*2)
-	line := leftInfo + strings.Repeat(" ", gap) + rightInfo
+	// gap := max(1, w-lipgloss.Width(leftInfo)-lipgloss.Width(rightInfo)-padding*2)
+	// line := leftInfo + strings.Repeat(" ", gap) + rightInfo
+	line := leftInfo
 	return hintStyle.Width(w).Padding(0, padding).Render(clipLine(line, w))
 }
 
