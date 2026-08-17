@@ -22,6 +22,7 @@ var (
 	mutedFg  = lipgloss.Color("#8a8a8a")
 	dimFg    = lipgloss.Color("#5c5c5c")
 	statusFg = lipgloss.Color("#6b6b6b")
+	errFg    = lipgloss.Color("#ff8a80")
 
 	borderFg      = lipgloss.Color("#333333")
 	accentFg      = lipgloss.Color("#4AFF75")
@@ -81,6 +82,7 @@ var (
 	dialogTitleStyle = lipgloss.NewStyle().Foreground(textFg).Bold(true)
 	dialogBodyStyle  = lipgloss.NewStyle().Foreground(statusFg)
 	dialogKeyStyle   = lipgloss.NewStyle().Foreground(dimFg)
+	dialogErrStyle   = lipgloss.NewStyle().Foreground(errFg).Bold(true)
 
 	helpCategoryStyle = lipgloss.NewStyle().Foreground(accentFg).Bold(true)
 	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(22)

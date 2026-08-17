@@ -47,9 +47,9 @@ func newApp() *AppModel {
 		tabs:   []Tab{t},
 		active: t.ID,
 		nextID: 2,
-		alert:  newAlertModel(80),
-		width:  80,
-		height: 24,
+		alert:  newAlertModel(minAppWidth),
+		width:  minAppWidth,
+		height: minAppHeight,
 	}
 	a.syncInputWidths()
 	return a
@@ -69,6 +69,9 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.pipeAlert(msg, a.resizeAll())
 
 	case tea.KeyPressMsg:
+		if a.tooSmall() {
+			return a.pipeAlert(msg, nil)
+		}
 		if cmd, handled := a.handleChromeKey(msg); handled {
 			return a.pipeAlert(msg, cmd)
 		}
@@ -78,10 +81,13 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.pipeAlert(msg, a.updateForm(msg))
 
 	case tea.MouseMsg:
+		if a.tooSmall() {
+			return a.pipeAlert(msg, nil)
+		}
 		return a.pipeAlert(msg, a.handleMouse(msg))
 
 	case tea.PasteMsg:
-		if a.focusAdd {
+		if a.tooSmall() || a.focusAdd {
 			return a.pipeAlert(msg, nil)
 		}
 		if a.curentTab().inSession() {

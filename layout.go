@@ -5,6 +5,9 @@ const (
 	helpBarHeight    = 1
 	maxTabLabelWidth = 35
 
+	minAppWidth  = 90
+	minAppHeight = 32
+
 	fieldChrome   = 4 // rounded border (2) + horizontal padding (2)
 	labelColWidth = 10
 	labelGap      = 1
@@ -20,11 +23,15 @@ func (a *AppModel) panelBoxHeight() int {
 // panelInnerWidth and panelInnerHeight are the content area inside
 // panelStyle's border and padding — what the form and the terminal render into.
 func (a *AppModel) panelInnerWidth() int {
-	return max(100, a.width-panelStyle.GetHorizontalFrameSize())
+	return max(1, a.width-panelStyle.GetHorizontalFrameSize())
 }
 
 func (a *AppModel) panelInnerHeight() int {
-	return max(20, a.panelBoxHeight()-panelStyle.GetVerticalFrameSize())
+	return max(1, a.panelBoxHeight()-panelStyle.GetVerticalFrameSize())
+}
+
+func (a *AppModel) tooSmall() bool {
+	return a.width < minAppWidth || a.height < minAppHeight
 }
 
 func (a *AppModel) termSize() (cols, rows int) {

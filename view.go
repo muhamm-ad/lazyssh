@@ -19,6 +19,9 @@ func (a *AppModel) View() tea.View {
 	v.AltScreen = true
 	v.BackgroundColor = termBg
 	v.MouseMode = tea.MouseModeCellMotion
+	if a.tooSmall() || a.confirmQuit || a.showHelp {
+		return v
+	}
 	v.Cursor = a.formCursor()
 	if t := a.curentTab(); t.inSession() && !a.focusAdd && !t.hasTermSelection() {
 		v.Cursor = a.terminalCursor()
@@ -53,6 +56,8 @@ func (a *AppModel) render() string {
 	help := a.viewAppStatusBar(a.width)
 	page := lipgloss.JoinVertical(lipgloss.Left, tabBar, panel, help)
 	switch {
+	case a.tooSmall():
+		return centerOver(page, a.viewMinSizeDialog(), a.width, a.height)
 	case a.confirmQuit:
 		return centerOver(page, a.viewQuitDialog(), a.width, a.height)
 	case a.showHelp:
@@ -76,16 +81,42 @@ func (a *AppModel) renderAlertInPanel(panel string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, a.alert.Render(head), tail)
 }
 
+// blurContent dims the page behind a modal: strip colors and paint it faint so
+// the dialog reads as the only interactive layer.
+func blurContent(s string) string {
+	return lipgloss.NewStyle().
+		Foreground(dimFg).
+		Faint(true).
+		Render(ansi.Strip(s))
+}
+
 func centerOver(page, modal string, w int, h int) string {
 	topLayer := lipgloss.NewLayer(modal).
 		X(max(0, (w-lipgloss.Width(modal))/2)).
 		Y(max(0, (h-lipgloss.Height(modal))/2)).
 		Z(1)
 
-	bottomLayer := lipgloss.NewLayer(page)
+	bottomLayer := lipgloss.NewLayer(blurContent(page))
 
-	return lipgloss.NewCanvas(w, h).
+	return lipgloss.NewCanvas(max(1, w), max(1, h)).
 		Compose(lipgloss.NewCompositor(bottomLayer, topLayer)).Render()
+}
+
+func (a *AppModel) viewMinSizeDialog() string {
+	required := fmt.Sprintf("%d × %d", minAppWidth, minAppHeight)
+	current := fmt.Sprintf("%d × %d", a.width, a.height)
+	lines := []string{
+		dialogTitleStyle.Render("Window too small"),
+		"",
+		dialogBodyStyle.Render("Minimum required size:"),
+		dialogTitleStyle.Render(required),
+		"",
+		dialogBodyStyle.Render("Current size:"),
+		dialogErrStyle.Render(current),
+		"",
+		dialogKeyStyle.Render("Resize the terminal to continue"),
+	}
+	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
 }
 
 func (a *AppModel) viewQuitDialog() string {
