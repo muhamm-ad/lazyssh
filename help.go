@@ -20,6 +20,7 @@ var helpCategories = []helpCategory{
 			{"? / ctrl+h", "show / hide this help"},
 			{"ctrl+q", "quit (asks for confirmation)"},
 			{"esc", "dismiss an alert"},
+			{"↑↓ / wheel", "scroll help (narrow)"},
 		},
 	},
 	{

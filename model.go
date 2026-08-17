@@ -25,6 +25,7 @@ type AppModel struct {
 	confirmQuit bool // the quit dialog is up and owns the keyboard
 	showHelp    bool // the help modal is up and owns the keyboard
 	focusAdd    bool // the tab-bar "+" is selected (ctrl+←/→), enter adds a tab
+	helpScroll  int  // vertical offset when help is a stacked scrollable page
 
 	alert bubbleup.AlertModel
 
@@ -152,6 +153,7 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 
 func (a *AppModel) openHelp() tea.Cmd {
 	a.showHelp = true
+	a.helpScroll = 0
 	a.blurAll()
 	return nil
 }
@@ -160,10 +162,23 @@ func (a *AppModel) updateHelpModal(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc", "ctrl+h":
 		a.showHelp = false
+		a.helpScroll = 0
 		if a.curentTab().inSession() {
 			return nil
 		}
 		return a.focusCurrent()
+	case "up", "k":
+		a.scrollHelp(-1)
+	case "down", "j":
+		a.scrollHelp(1)
+	case "pgup":
+		a.scrollHelp(-a.helpBodyHeight())
+	case "pgdown":
+		a.scrollHelp(a.helpBodyHeight())
+	case "home":
+		a.helpScroll = 0
+	case "end":
+		a.helpScroll = a.helpMaxScroll()
 	}
 	return nil
 }

@@ -113,20 +113,80 @@ func (a *AppModel) connectedCount() int {
 }
 
 func (a *AppModel) viewHelpModal() string {
-	left := renderHelpColumn(helpCategories[:3])
-	right := renderHelpColumn(helpCategories[3:])
-	gap := strings.Repeat(" ", 4)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, gap, right)
+	stacked := a.helpShouldStack()
+	body := a.helpBody(stacked)
+	bodyLines := strings.Split(body, "\n")
+	bodyH := a.helpBodyHeight()
+	scrollable := len(bodyLines) > bodyH
+	if scrollable {
+		a.clampHelpScroll(len(bodyLines), bodyH)
+		end := min(a.helpScroll+bodyH, len(bodyLines))
+		body = strings.Join(bodyLines[a.helpScroll:end], "\n")
+	} else {
+		a.helpScroll = 0
+	}
 
-	return dialogStyle.
+	footer := "esc / ctrl+h  close"
+	if scrollable {
+		footer = "↑↓ / wheel  scroll     esc / ctrl+h  close"
+	}
+
+	modal := dialogStyle.
 		Align(lipgloss.Left).
 		Render(lipgloss.JoinVertical(lipgloss.Left,
 			dialogTitleStyle.Render("Help"),
 			"",
 			body,
 			"",
-			dialogKeyStyle.Render("esc / ctrl+h  close"),
+			dialogKeyStyle.Render(footer),
 		))
+	if stacked {
+		// Keep the stacked page inside the window/panel width.
+		maxW := max(20, a.width-2)
+		if lipgloss.Width(modal) > maxW {
+			modal = lipgloss.NewStyle().MaxWidth(maxW).Render(modal)
+		}
+	}
+	return modal
+}
+
+func (a *AppModel) helpShouldStack() bool {
+	twoCol := a.helpBody(false)
+	frame := dialogStyle.GetHorizontalFrameSize()
+	return lipgloss.Width(twoCol)+frame > a.width
+}
+
+func (a *AppModel) helpBody(stacked bool) string {
+	if stacked {
+		return renderHelpColumn(helpCategories)
+	}
+	left := renderHelpColumn(helpCategories[:3])
+	right := renderHelpColumn(helpCategories[3:])
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", 4), right)
+}
+
+// helpBodyHeight is how many content rows fit under the title/footer chrome
+// inside the window.
+func (a *AppModel) helpBodyHeight() int {
+	chrome := dialogStyle.GetVerticalFrameSize() +
+		lipgloss.Height(dialogTitleStyle.Render("Help")) +
+		lipgloss.Height(dialogKeyStyle.Render("esc / ctrl+h  close")) +
+		2 // blank lines around the body
+	return max(3, a.height-chrome-2)
+}
+
+func (a *AppModel) helpMaxScroll() int {
+	lines := lipgloss.Height(a.helpBody(a.helpShouldStack()))
+	return max(0, lines-a.helpBodyHeight())
+}
+
+func (a *AppModel) clampHelpScroll(totalLines, viewH int) {
+	a.helpScroll = max(0, min(a.helpScroll, max(0, totalLines-viewH)))
+}
+
+func (a *AppModel) scrollHelp(delta int) {
+	a.helpScroll += delta
+	a.clampHelpScroll(lipgloss.Height(a.helpBody(a.helpShouldStack())), a.helpBodyHeight())
 }
 
 func renderHelpColumn(cats []helpCategory) string {

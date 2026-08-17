@@ -8,7 +8,18 @@ import (
 const tabBarScrollStep = 8
 
 func (a *AppModel) handleMouse(msg tea.MouseMsg) tea.Cmd {
-	if a.confirmQuit || a.showHelp {
+	if a.confirmQuit {
+		return nil
+	}
+	if a.showHelp {
+		if wheel, ok := msg.(tea.MouseWheelMsg); ok {
+			switch wheel.Button {
+			case tea.MouseWheelUp:
+				a.scrollHelp(-3)
+			case tea.MouseWheelDown:
+				a.scrollHelp(3)
+			}
+		}
 		return nil
 	}
 
