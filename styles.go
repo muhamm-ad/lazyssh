@@ -84,6 +84,14 @@ var (
 	dialogKeyStyle   = lipgloss.NewStyle().Foreground(dimFg)
 	dialogErrStyle   = lipgloss.NewStyle().Foreground(errFg).Bold(true)
 
+	dialogBtnStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderFg).
+			Foreground(textFg).
+			Padding(0, 2).
+			Height(1)
+	dialogQuitBtnStyle = dialogBtnStyle.Foreground(errFg)
+
 	helpCategoryStyle = lipgloss.NewStyle().Foreground(accentFg).Bold(true)
 	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(22)
 	helpDescStyle     = lipgloss.NewStyle().Foreground(dimFg)

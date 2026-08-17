@@ -91,15 +91,26 @@ func blurContent(s string) string {
 }
 
 func centerOver(page, modal string, w int, h int) string {
+	x, y := modalOrigin(modal, w, h)
 	topLayer := lipgloss.NewLayer(modal).
-		X(max(0, (w-lipgloss.Width(modal))/2)).
-		Y(max(0, (h-lipgloss.Height(modal))/2)).
+		X(x).
+		Y(y).
 		Z(1)
 
 	bottomLayer := lipgloss.NewLayer(blurContent(page))
 
 	return lipgloss.NewCanvas(max(1, w), max(1, h)).
 		Compose(lipgloss.NewCompositor(bottomLayer, topLayer)).Render()
+}
+
+func modalOrigin(modal string, w, h int) (x, y int) {
+	return max(0, (w-lipgloss.Width(modal))/2), max(0, (h-lipgloss.Height(modal))/2)
+}
+
+func (a *AppModel) pointInModal(x, y int, modal string) bool {
+	mx, my := modalOrigin(modal, a.width, a.height)
+	mw, mh := lipgloss.Width(modal), lipgloss.Height(modal)
+	return x >= mx && x < mx+mw && y >= my && y < my+mh
 }
 
 func (a *AppModel) viewMinSizeDialog() string {
@@ -119,7 +130,13 @@ func (a *AppModel) viewMinSizeDialog() string {
 	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
 }
 
-func (a *AppModel) viewQuitDialog() string {
+const (
+	quitBtnQuit   = 0
+	quitBtnCancel = 1
+	quitBtnGap    = 2
+)
+
+func (a *AppModel) quitDialogLines() []string {
 	lines := []string{dialogTitleStyle.Render("Quit lazyssh?")}
 	if n := a.connectedCount(); n > 0 {
 		body := "The SSH session will be closed."
@@ -128,9 +145,69 @@ func (a *AppModel) viewQuitDialog() string {
 		}
 		lines = append(lines, dialogBodyStyle.Render(body))
 	}
-	lines = append(lines, "", dialogKeyStyle.Render("y / enter  quit     n / esc  cancel"))
+	lines = append(lines, "", a.quitButtonsRow())
+	return lines
+}
 
-	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
+func (a *AppModel) viewQuitDialog() string {
+	return dialogStyle.Render(lipgloss.JoinVertical(lipgloss.Center, a.quitDialogLines()...))
+}
+
+func (a *AppModel) quitButtonsRow() string {
+	quit := a.quitButton("Quit", a.quitFocus == quitBtnQuit, true)
+	cancel := a.quitButton("Cancel", a.quitFocus == quitBtnCancel, false)
+	return lipgloss.JoinHorizontal(lipgloss.Center, quit, strings.Repeat(" ", quitBtnGap), cancel)
+}
+
+func (a *AppModel) quitButton(label string, focused, danger bool) string {
+	style := dialogBtnStyle
+	if danger {
+		style = dialogQuitBtnStyle
+	}
+	if focused {
+		style = style.BorderForeground(accentFg)
+	}
+	return style.Render(label)
+}
+
+// hitQuitDialogButton returns quitBtnQuit, quitBtnCancel, or -1 if the click
+// landed on the dialog but not on a button.
+func (a *AppModel) hitQuitDialogButton(x, y int) int {
+	modal := a.viewQuitDialog()
+	dx, dy := modalOrigin(modal, a.width, a.height)
+	ix := dx + dialogStyle.GetBorderLeftSize() + dialogStyle.GetPaddingLeft()
+	iy := dy + dialogStyle.GetBorderTopSize() + dialogStyle.GetPaddingTop()
+
+	lines := a.quitDialogLines()
+	innerW := 0
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > innerW {
+			innerW = w
+		}
+	}
+
+	rowY := iy
+	for _, line := range lines[:len(lines)-1] {
+		rowY += lipgloss.Height(line)
+	}
+
+	btnRow := a.quitButtonsRow()
+	btnH := lipgloss.Height(btnRow)
+	btnW := lipgloss.Width(btnRow)
+	btnX := ix + max(0, (innerW-btnW)/2)
+	if y < rowY || y >= rowY+btnH || x < btnX || x >= btnX+btnW {
+		return -1
+	}
+
+	quitW := lipgloss.Width(a.quitButton("Quit", a.quitFocus == quitBtnQuit, true))
+	if x < btnX+quitW {
+		return quitBtnQuit
+	}
+	cancelX := btnX + quitW + quitBtnGap
+	if x >= cancelX && x < btnX+btnW {
+		return quitBtnCancel
+	}
+	return -1
 }
 
 func (a *AppModel) connectedCount() int {

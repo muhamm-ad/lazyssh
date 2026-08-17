@@ -9,18 +9,10 @@ const tabBarScrollStep = 8
 
 func (a *AppModel) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	if a.confirmQuit {
-		return nil
+		return a.handleQuitDialogMouse(msg)
 	}
 	if a.showHelp {
-		if wheel, ok := msg.(tea.MouseWheelMsg); ok {
-			switch wheel.Button {
-			case tea.MouseWheelUp:
-				a.scrollHelp(-3)
-			case tea.MouseWheelDown:
-				a.scrollHelp(3)
-			}
-		}
-		return nil
+		return a.handleHelpModalMouse(msg)
 	}
 
 	m := msg.Mouse()
@@ -70,6 +62,45 @@ func (a *AppModel) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	default:
 		return nil
 	}
+}
+
+func (a *AppModel) handleQuitDialogMouse(msg tea.MouseMsg) tea.Cmd {
+	click, ok := msg.(tea.MouseClickMsg)
+	if !ok || click.Mouse().Button != tea.MouseLeft {
+		return nil
+	}
+	m := click.Mouse()
+	if !a.pointInModal(m.X, m.Y, a.viewQuitDialog()) {
+		return a.dismissQuit()
+	}
+	switch a.hitQuitDialogButton(m.X, m.Y) {
+	case quitBtnQuit:
+		return a.doQuit()
+	case quitBtnCancel:
+		return a.dismissQuit()
+	}
+	return nil
+}
+
+func (a *AppModel) handleHelpModalMouse(msg tea.MouseMsg) tea.Cmd {
+	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
+		switch wheel.Button {
+		case tea.MouseWheelUp:
+			a.scrollHelp(-3)
+		case tea.MouseWheelDown:
+			a.scrollHelp(3)
+		}
+		return nil
+	}
+	click, ok := msg.(tea.MouseClickMsg)
+	if !ok || click.Mouse().Button != tea.MouseLeft {
+		return nil
+	}
+	m := click.Mouse()
+	if !a.pointInModal(m.X, m.Y, a.viewHelpModal()) {
+		return a.dismissHelp()
+	}
+	return nil
 }
 
 func (a *AppModel) inTerminalPanel(y int) bool {

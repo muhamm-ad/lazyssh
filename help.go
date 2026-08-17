@@ -17,10 +17,8 @@ var helpCategories = []helpCategory{
 	{
 		title: "General",
 		entries: []helpEntry{
-			{"? / ctrl+h", "show / hide this help"},
+			{"ctrl+h", "show / hide this help"},
 			{"ctrl+q", "quit (asks for confirmation)"},
-			{"esc", "dismiss an alert"},
-			{"↑↓ / wheel", "scroll help (narrow)"},
 		},
 	},
 	{
@@ -53,14 +51,24 @@ var helpCategories = []helpCategory{
 		},
 	},
 	{
+		title: "Quit",
+		entries: []helpEntry{
+			{"tab / enter", "switch / select quit buttons"},
+			{"esc", "dismiss an alert or dialog"},
+		},
+	},
+	{
 		title: "Mouse",
 		entries: []helpEntry{
+			{"↑↓ / wheel", "scroll help (narrow)"},
 			{"click (tab)", "select / close / add a tab"},
 			{"wheel (tab bar)", "scroll tabs horizontally"},
 			{"click (form)", "focus a field or connect"},
 			{"drag (field)", "select text in a field"},
 			{"wheel (terminal)", "scroll terminal history"},
 			{"drag (terminal)", "select terminal text"},
+			{"click (outside)", "close help or quit dialog"},
+			{"click (quit btn)", "quit or cancel"},
 		},
 	},
 }

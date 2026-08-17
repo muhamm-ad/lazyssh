@@ -23,6 +23,7 @@ type AppModel struct {
 	nextID int
 
 	confirmQuit bool // the quit dialog is up and owns the keyboard
+	quitFocus   int  // 0 = Quit button, 1 = Cancel button
 	showHelp    bool // the help modal is up and owns the keyboard
 	focusAdd    bool // the tab-bar "+" is selected (ctrl+←/→), enter adds a tab
 	helpScroll  int  // vertical offset when help is a stacked scrollable page
@@ -147,6 +148,7 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		return a.prevTab(), true
 	case key.String() == "ctrl+q":
 		a.confirmQuit = true
+		a.quitFocus = quitBtnQuit
 		a.blurAll()
 		return nil, true
 	case a.focusAdd && key.String() == "enter":
@@ -167,12 +169,7 @@ func (a *AppModel) openHelp() tea.Cmd {
 func (a *AppModel) updateHelpModal(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc", "ctrl+h":
-		a.showHelp = false
-		a.helpScroll = 0
-		if a.curentTab().inSession() {
-			return nil
-		}
-		return a.focusCurrent()
+		return a.dismissHelp()
 	case "up", "k":
 		a.scrollHelp(-1)
 	case "down", "j":
@@ -187,6 +184,15 @@ func (a *AppModel) updateHelpModal(key tea.KeyPressMsg) tea.Cmd {
 		a.helpScroll = a.helpMaxScroll()
 	}
 	return nil
+}
+
+func (a *AppModel) dismissHelp() tea.Cmd {
+	a.showHelp = false
+	a.helpScroll = 0
+	if a.curentTab().inSession() {
+		return nil
+	}
+	return a.focusCurrent()
 }
 
 func (a *AppModel) currentTabIndex() int {
@@ -204,16 +210,36 @@ func (a *AppModel) curentTab() *Tab {
 
 func (a *AppModel) updateQuitDialog(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
-	case "y", "Y", "enter":
-		for i := range a.tabs {
-			a.tabs[i].closeSSH()
+	case "tab", "right":
+		a.quitFocus = 1 - a.quitFocus
+	case "shift+tab", "left":
+		a.quitFocus = 1 - a.quitFocus
+	case "enter", " ":
+		if a.quitFocus == quitBtnQuit {
+			return a.doQuit()
 		}
-		return tea.Quit
+		return a.dismissQuit()
+	case "y", "Y":
+		return a.doQuit()
 	case "n", "N", "esc":
-		a.confirmQuit = false
-		return a.focusCurrent()
+		return a.dismissQuit()
 	}
 	return nil
+}
+
+func (a *AppModel) doQuit() tea.Cmd {
+	for i := range a.tabs {
+		a.tabs[i].closeSSH()
+	}
+	return tea.Quit
+}
+
+func (a *AppModel) dismissQuit() tea.Cmd {
+	a.confirmQuit = false
+	if a.curentTab().inSession() {
+		return nil
+	}
+	return a.focusCurrent()
 }
 
 func (a *AppModel) updateTerminal(msg tea.Msg) tea.Cmd {
