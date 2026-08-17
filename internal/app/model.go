@@ -1,7 +1,8 @@
+// Package app implements the lazyssh TUI: tabs, connection form, and chrome.
+package app
+
 // State and key handling: what the app knows, and how each key changes it.
 // Nothing here decides how anything looks — see view.go for that.
-
-package main
 
 import (
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	bubbleup "go.dalton.dog/bubbleup/v2"
 
 	bubblessh "github.com/muhamm-ad/bubble-ssh"
 )
@@ -22,12 +24,20 @@ type AppModel struct {
 	nextID int
 
 	confirmQuit bool // the quit dialog is up and owns the keyboard
+	quitFocus   int  // 0 = Quit button, 1 = Cancel button
 	showHelp    bool // the help modal is up and owns the keyboard
+	focusAdd    bool // the tab-bar "+" is selected (ctrl+←/→), enter adds a tab
+	helpScroll  int  // vertical offset when help is a stacked scrollable page
 
+	alert bubbleup.AlertModel
+
+	tabBarScroll  int // horizontal offset of the tab strip, in cells
+	fieldDragging bool
+	termDragging  bool
 	width, height int
 }
 
-func newApp() *AppModel {
+func New() *AppModel {
 	t := NewTab(1)
 	t.Host.SetValue("bandit.labs.overthewire.org")
 	t.Port.SetValue("2220")
@@ -39,15 +49,16 @@ func newApp() *AppModel {
 		tabs:   []Tab{t},
 		active: t.ID,
 		nextID: 2,
-		width:  80,
-		height: 24,
+		alert:  newAlertModel(minAppWidth),
+		width:  minAppWidth,
+		height: minAppHeight,
 	}
 	a.syncInputWidths()
 	return a
 }
 
 func (a *AppModel) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, a.alert.Init())
 }
 
 func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -55,40 +66,50 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		a.syncInputWidths()
-		return a, a.resizeAll()
+		a.clampTabBarScroll()
+		a.syncAlertWidth()
+		return a.pipeAlert(msg, a.resizeAll())
 
 	case tea.KeyPressMsg:
+		if a.tooSmall() {
+			return a.pipeAlert(msg, nil)
+		}
 		if cmd, handled := a.handleChromeKey(msg); handled {
-			return a, cmd
+			return a.pipeAlert(msg, cmd)
 		}
-		if a.curentTab().Connected {
-			return a, a.updateTerminal(msg)
+		if a.curentTab().inSession() {
+			return a.pipeAlert(msg, a.updateTerminal(msg))
 		}
-		return a, a.updateForm(msg)
+		return a.pipeAlert(msg, a.updateForm(msg))
 
-	case tea.PasteMsg, tea.MouseMsg:
-		if a.curentTab().Connected {
-			return a, a.updateTerminal(msg)
+	case tea.MouseMsg:
+		if a.tooSmall() {
+			return a.pipeAlert(msg, nil)
 		}
-		return a, a.updateForm(msg)
+		return a.pipeAlert(msg, a.handleMouse(msg))
+
+	case tea.PasteMsg:
+		if a.tooSmall() || a.focusAdd {
+			return a.pipeAlert(msg, nil)
+		}
+		if a.curentTab().inSession() {
+			return a.pipeAlert(msg, a.updateTerminal(msg))
+		}
+		return a.pipeAlert(msg, a.updateForm(msg))
 
 	default:
-		// Async messages that belong to a specific tab's SSH session (or to
-		// nobody) — connect/output/close/error from bubblessh, and
-		// textinput's blink tick. pumpSSH fans it to every tab's session;
-		// each bubblessh.Model silently ignores a message carrying another
-		// instance's id, which is what keeps a backgrounded session's own
-		// read loop armed instead of stalling while another tab is on
-		// screen. The active tab's form (if that's what it's showing) still
-		// needs the same message for its focused input's blinking cursor.
+		wasLive := a.curentTab().inSession()
 		cmd := a.pumpSSH(msg)
-		if !a.curentTab().Connected {
+		if !a.curentTab().inSession() {
+			if wasLive {
+				cmd = tea.Batch(cmd, a.focusCurrent())
+			}
 			cmd = tea.Batch(cmd, a.updateForm(msg))
 		}
-		return a, cmd
+		cmd = tea.Batch(cmd, a.alertFromTabs())
+		return a.pipeAlert(msg, cmd)
 	}
 }
-
 
 // resizeAll keeps every connected tab's PTY in sync with the window, not just
 // the active one, so a backgrounded session is already correctly sized by the
@@ -96,10 +117,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *AppModel) resizeAll() tea.Cmd {
 	var cmds []tea.Cmd
 	for i := range a.tabs {
-		t := &a.tabs[i]
-		if t.HasSSH {
-			var cmd tea.Cmd
-			t.SSH, cmd = t.SSH.SetSize(a.termSize())
+		if cmd := a.tabs[i].setSSHSize(a.termSize()); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -116,7 +134,14 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		return a.openHelp(), true
 	case key.String() == "ctrl+t":
 		return a.addTab(), true
+	case key.String() == "ctrl+c":
+		if a.copyTermSelection() {
+			return a.notifyInfo("copied"), true
+		}
 	case key.String() == "ctrl+w":
+		if a.focusAdd {
+			return nil, true
+		}
 		return a.closeTab(a.active), true
 	case key.String() == "ctrl+right":
 		return a.nextTab(), true
@@ -124,7 +149,12 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		return a.prevTab(), true
 	case key.String() == "ctrl+q":
 		a.confirmQuit = true
+		a.quitFocus = quitBtnQuit
 		a.blurAll()
+		return nil, true
+	case a.focusAdd && key.String() == "enter":
+		return a.addTab(), true
+	case a.focusAdd:
 		return nil, true
 	}
 	return nil, false
@@ -132,6 +162,7 @@ func (a *AppModel) handleChromeKey(key tea.KeyPressMsg) (tea.Cmd, bool) {
 
 func (a *AppModel) openHelp() tea.Cmd {
 	a.showHelp = true
+	a.helpScroll = 0
 	a.blurAll()
 	return nil
 }
@@ -139,13 +170,30 @@ func (a *AppModel) openHelp() tea.Cmd {
 func (a *AppModel) updateHelpModal(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc", "ctrl+h":
-		a.showHelp = false
-		if a.curentTab().Connected {
-			return nil
-		}
-		return a.focusCurrent()
+		return a.dismissHelp()
+	case "up", "k":
+		a.scrollHelp(-1)
+	case "down", "j":
+		a.scrollHelp(1)
+	case "pgup":
+		a.scrollHelp(-a.helpBodyHeight())
+	case "pgdown":
+		a.scrollHelp(a.helpBodyHeight())
+	case "home":
+		a.helpScroll = 0
+	case "end":
+		a.helpScroll = a.helpMaxScroll()
 	}
 	return nil
+}
+
+func (a *AppModel) dismissHelp() tea.Cmd {
+	a.showHelp = false
+	a.helpScroll = 0
+	if a.curentTab().inSession() {
+		return nil
+	}
+	return a.focusCurrent()
 }
 
 func (a *AppModel) currentTabIndex() int {
@@ -163,61 +211,59 @@ func (a *AppModel) curentTab() *Tab {
 
 func (a *AppModel) updateQuitDialog(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
-	case "y", "Y", "enter":
-		for i := range a.tabs {
-			if a.tabs[i].HasSSH {
-				_ = a.tabs[i].SSH.Close()
-			}
+	case "tab", "right":
+		a.quitFocus = 1 - a.quitFocus
+	case "shift+tab", "left":
+		a.quitFocus = 1 - a.quitFocus
+	case "enter", " ":
+		if a.quitFocus == quitBtnQuit {
+			return a.doQuit()
 		}
-		return tea.Quit
+		return a.dismissQuit()
+	case "y", "Y":
+		return a.doQuit()
 	case "n", "N", "esc":
-		a.confirmQuit = false
-		return a.focusCurrent()
+		return a.dismissQuit()
 	}
 	return nil
 }
 
+func (a *AppModel) doQuit() tea.Cmd {
+	for i := range a.tabs {
+		a.tabs[i].closeSSH()
+	}
+	return tea.Quit
+}
+
+func (a *AppModel) dismissQuit() tea.Cmd {
+	a.confirmQuit = false
+	if a.curentTab().inSession() {
+		return nil
+	}
+	return a.focusCurrent()
+}
+
 func (a *AppModel) updateTerminal(msg tea.Msg) tea.Cmd {
 	t := a.curentTab()
-	if key, ok := msg.(tea.KeyPressMsg); ok && key.String() == "ctrl+b" {
-		_ = t.SSH.Close()
-		t.LastErr = t.SSH.Err()
-		t.Connected = false
-		t.Status = ""
-		if t.LastErr != nil {
-			t.Status = t.LastErr.Error()
-		}
-		return a.focusCurrent()
-	}
-
-	m, cmd := t.SSH.Update(msg)
-	t.SSH = m.(bubblessh.Model)
-
-	wasConnected := t.Connected
-	t.syncFromSSH()
-	if wasConnected && !t.Connected {
-		// The session just dropped or errored out — give the form back.
+	wasLive := t.inSession()
+	cmd := t.updateSSH(msg)
+	cmd = tea.Batch(cmd, a.alertFromTabs())
+	if wasLive && !t.inSession() {
+		// The remote shell exited (or the session dropped) — give the form back.
 		return tea.Batch(cmd, a.focusCurrent())
 	}
 	return cmd
 }
 
 // pumpSSH feeds msg to every tab that has an SSH model, regardless of which
-// tab is active, and syncs each tab's status from the result. This is what
-// keeps a backgrounded session's own read loop armed — bubblessh's
-// waitForActivity command has to be re-issued from inside Update every time
-// it fires, and that has to happen whether or not that tab is on screen.
+// tab is active. This is what keeps a backgrounded session's own read loop
+// armed — bubblessh's waitForActivity command has to be re-issued from
+// inside Update every time it fires, and that has to happen whether or not
+// that tab is on screen.
 func (a *AppModel) pumpSSH(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	for i := range a.tabs {
-		t := &a.tabs[i]
-		if !t.HasSSH {
-			continue
-		}
-		m, cmd := t.SSH.Update(msg)
-		t.SSH = m.(bubblessh.Model)
-		t.syncFromSSH()
-		if cmd != nil {
+		if cmd := a.tabs[i].updateSSH(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -231,21 +277,72 @@ func (a *AppModel) updateForm(msg tea.Msg) tea.Cmd {
 		// deliberately skips the literal space and falls back to Keystroke).
 		switch key.String() {
 		case "tab":
+			t.clearSelection()
 			return a.moveFocus(1)
 		case "shift+tab":
+			t.clearSelection()
 			return a.moveFocus(-1)
 		case "enter":
+			t.clearSelection()
 			return a.connect()
+		case "ctrl+a":
+			t.selectAllFocused()
+			return nil
+		case "ctrl+c":
+			t.copyFocused()
+			if !t.secretLocked() && t.focusedInput() != nil {
+				return a.notifyInfo("copied")
+			}
+			return nil
+		case "ctrl+x":
+			t.cutFocused()
+			if !t.secretLocked() {
+				return a.notifyInfo("cut")
+			}
+			return nil
+		case "ctrl+z":
+			t.undoLast()
+			a.blurAll()
+			return a.focusCurrent()
+		}
+
+		if t.focusedInput() != nil {
+			t.pushUndo()
+		}
+
+		switch key.String() {
+		case "ctrl+v":
+			t.replaceSelectedIfNeeded()
+		case "left", "right", "home", "end":
+			t.clearSelection()
+		case "backspace", "delete", "ctrl+h", "ctrl+d":
+			if t.TextSelected {
+				t.replaceSelectedIfNeeded()
+				t.dropUndoIfUnchanged()
+				return nil
+			}
 		case "space", " ":
 			switch t.Focus {
 			case fieldMethod:
+				t.dropUndoIfUnchanged()
 				t.UsePassword = !t.UsePassword
 				t.ApplyMethod()
 				return nil
 			case fieldConnect:
+				t.dropUndoIfUnchanged()
 				return a.connect()
 			}
+			t.replaceSelectedIfNeeded()
+		default:
+			if t.TextSelected && t.focusedInput() != nil && key.Text != "" {
+				t.replaceSelectedIfNeeded()
+			}
 		}
+	} else if t.focusedInput() != nil {
+		t.pushUndo()
+	}
+	if _, ok := msg.(tea.PasteMsg); ok {
+		t.replaceSelectedIfNeeded()
 	}
 
 	var cmd tea.Cmd
@@ -259,12 +356,14 @@ func (a *AppModel) updateForm(msg tea.Msg) tea.Cmd {
 	case fieldSecret:
 		t.Secret, cmd = t.Secret.Update(msg)
 	}
+	t.dropUndoIfUnchanged()
 	return cmd
 }
 
 func (a *AppModel) moveFocus(delta int) tea.Cmd {
 	a.blurAll()
 	t := a.curentTab()
+	t.clearSelection()
 	t.Focus = (t.Focus + delta + fieldCount) % fieldCount
 	return a.focusCurrent()
 }
@@ -299,16 +398,16 @@ func (a *AppModel) focusCurrent() tea.Cmd {
 // already owns the terminal.
 func (a *AppModel) connect() tea.Cmd {
 	t := a.curentTab()
-	if t.HasSSH {
-		_ = t.SSH.Close()
-	}
 
 	port, err := strconv.Atoi(strings.TrimSpace(t.Port.Value()))
 	if err != nil || port < 1 || port > 65535 {
-		t.LastErr = fmt.Errorf("invalid port %q", t.Port.Value())
-		t.Status = t.LastErr.Error()
-		return nil
+		msg := friendlyError(fmt.Sprintf("invalid port %q", t.Port.Value()))
+		t.Status = msg
+		t.lastNotified = msg
+		return a.notifyError(msg)
 	}
+
+	t.closeSSH()
 
 	opts := []bubblessh.Option{
 		bubblessh.WithUser(t.User.Value()),
@@ -324,13 +423,13 @@ func (a *AppModel) connect() tea.Cmd {
 		opts = append(opts, bubblessh.WithAcceptNewHostKeys(filepath.Join(home, ".ssh", "known_hosts")))
 	}
 
-	t.SSH = bubblessh.New(t.Host.Value(), opts...)
-	t.HasSSH = true
-	t.Connected = true
-	t.LastErr = nil
-	t.Status = "connecting…"
+	m := bubblessh.New(t.Host.Value(), opts...)
+	t.SSH = &m
+	t.Status = ""
+	t.lastNotified = ""
+	t.wasLive = false
 	a.blurAll()
-	return t.SSH.Init()
+	return tea.Batch(t.SSH.Init(), a.alertFromTab(t))
 }
 
 // addTab opens a fresh, blank tab and makes it active.
@@ -339,7 +438,9 @@ func (a *AppModel) addTab() tea.Cmd {
 	a.nextID++
 	a.tabs = append(a.tabs, t)
 	a.active = t.ID
+	a.focusAdd = false
 	a.syncInputWidths()
+	a.ensureActiveTabVisible()
 	return a.focusCurrent()
 }
 
@@ -357,9 +458,7 @@ func (a *AppModel) closeTab(id int) tea.Cmd {
 	if idx < 0 {
 		return nil
 	}
-	if a.tabs[idx].HasSSH {
-		_ = a.tabs[idx].SSH.Close()
-	}
+	a.tabs[idx].closeSSH()
 	wasActive := a.tabs[idx].ID == a.active
 
 	a.tabs = append(a.tabs[:idx], a.tabs[idx+1:]...)
@@ -369,15 +468,19 @@ func (a *AppModel) closeTab(id int) tea.Cmd {
 		a.nextID++
 		a.tabs = []Tab{t}
 		a.active = t.ID
+		a.focusAdd = false
+		a.ensureActiveTabVisible()
 		return a.focusCurrent()
 	}
 
 	if !wasActive {
+		a.clampTabBarScroll()
 		return nil
 	}
 	next := min(idx, len(a.tabs)-1)
 	a.active = a.tabs[next].ID
-	if a.curentTab().Connected {
+	a.ensureActiveTabVisible()
+	if a.curentTab().inSession() {
 		return nil
 	}
 	return a.focusCurrent()
@@ -387,12 +490,22 @@ func (a *AppModel) nextTab() tea.Cmd { return a.switchTab(1) }
 func (a *AppModel) prevTab() tea.Cmd { return a.switchTab(-1) }
 
 func (a *AppModel) switchTab(delta int) tea.Cmd {
-	if len(a.tabs) < 2 {
+	n := len(a.tabs)
+	// One slot per tab, plus the trailing "+" in the tab bar.
+	pos := n
+	if !a.focusAdd {
+		pos = a.currentTabIndex()
+	}
+	pos = (pos + delta + n + 1) % (n + 1)
+	if pos == n {
+		a.focusAdd = true
+		a.blurAll()
 		return nil
 	}
-	idx := (a.currentTabIndex() + delta + len(a.tabs)) % len(a.tabs)
-	a.active = a.tabs[idx].ID
-	if a.curentTab().Connected {
+	a.focusAdd = false
+	a.active = a.tabs[pos].ID
+	a.ensureActiveTabVisible()
+	if a.curentTab().inSession() {
 		return nil
 	}
 	return a.focusCurrent()

@@ -1,3 +1,5 @@
+package app
+
 // Colors and styles, transcribed from design/SSH_TUI.html. Keeping them in one
 // place means the design can be re-checked against this file alone.
 //
@@ -6,10 +8,10 @@
 // input fields, the connected badge) — each is its own layer, not just a
 // border on the page background.
 
-package main
-
 import (
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 )
 
@@ -21,7 +23,6 @@ var (
 	dimFg    = lipgloss.Color("#5c5c5c")
 	statusFg = lipgloss.Color("#6b6b6b")
 	errFg    = lipgloss.Color("#ff8a80")
-	termFg   = lipgloss.Color("#4AFF75")
 
 	borderFg      = lipgloss.Color("#333333")
 	accentFg      = lipgloss.Color("#4AFF75")
@@ -33,8 +34,6 @@ var (
 	tabDotOn      = lipgloss.Color("#4AFF75")
 	tabDotOff     = lipgloss.Color("#4a4a4a")
 	tabCloseFg    = lipgloss.Color("#6b6b6b")
-
-	badgeBg = lipgloss.Color("#12291a")
 )
 
 var (
@@ -71,8 +70,7 @@ var (
 	focusedFieldStyle   = fieldStyle.BorderForeground(accentFg)
 	focusedConnectStyle = connectStyle.BorderForeground(accentFg)
 
-	statusStyle = lipgloss.NewStyle().Foreground(dimFg)
-	errStyle    = lipgloss.NewStyle().Foreground(errFg)
+	selectedTextStyle = lipgloss.NewStyle().Foreground(termBg).Background(accentFg)
 
 	termContentStyle = lipgloss.NewStyle().Foreground(dimFg)
 
@@ -84,9 +82,18 @@ var (
 	dialogTitleStyle = lipgloss.NewStyle().Foreground(textFg).Bold(true)
 	dialogBodyStyle  = lipgloss.NewStyle().Foreground(statusFg)
 	dialogKeyStyle   = lipgloss.NewStyle().Foreground(dimFg)
+	dialogErrStyle   = lipgloss.NewStyle().Foreground(errFg).Bold(true)
+
+	dialogBtnStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderFg).
+			Foreground(textFg).
+			Padding(0, 2).
+			Height(1)
+	dialogQuitBtnStyle = dialogBtnStyle.Foreground(errFg)
 
 	helpCategoryStyle = lipgloss.NewStyle().Foreground(accentFg).Bold(true)
-	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(18)
+	helpKeyStyle      = lipgloss.NewStyle().Foreground(textFg).Width(22)
 	helpDescStyle     = lipgloss.NewStyle().Foreground(dimFg)
 
 	tabStyle = lipgloss.NewStyle().
@@ -100,11 +107,6 @@ var (
 	tabDotOnStyle  = lipgloss.NewStyle().Foreground(tabDotOn)
 	tabDotOffStyle = lipgloss.NewStyle().Foreground(tabDotOff)
 	tabCloseStyle  = lipgloss.NewStyle().Foreground(tabCloseFg)
-
-	connectedBadgeStyle = lipgloss.NewStyle().
-				Background(badgeBg).
-				Foreground(termFg).
-				Padding(0, 1)
 )
 
 func styleInput(m *textinput.Model) {
@@ -114,5 +116,10 @@ func styleInput(m *textinput.Model) {
 	s.Blurred.Text = lipgloss.NewStyle().Foreground(textFg)
 	s.Blurred.Placeholder = lipgloss.NewStyle().Foreground(dimFg)
 	s.Cursor.Color = accentFg
+	s.Cursor.Shape = tea.CursorBar
+	s.Cursor.Blink = true
 	m.SetStyles(s)
+	m.SetVirtualCursor(false)
+	// ctrl+a is select-all in the form, not "go to start of line".
+	m.KeyMap.LineStart = key.NewBinding(key.WithKeys("home"))
 }
