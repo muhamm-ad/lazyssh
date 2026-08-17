@@ -11,6 +11,8 @@ import (
 	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/muhamm-ad/lazyssh/internal/app"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(newApp())
+	p := tea.NewProgram(app.New())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "lazyssh:", err)
 		os.Exit(1)

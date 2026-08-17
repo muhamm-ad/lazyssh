@@ -1,3 +1,5 @@
+package app
+
 // Colors and styles, transcribed from design/SSH_TUI.html. Keeping them in one
 // place means the design can be re-checked against this file alone.
 //
@@ -5,8 +7,6 @@
 // paints real backgrounds on its panels and boxes (tabs, the content panel,
 // input fields, the connected badge) — each is its own layer, not just a
 // border on the page background.
-
-package main
 
 import (
 	"charm.land/bubbles/v2/key"

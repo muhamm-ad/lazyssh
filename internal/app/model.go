@@ -1,7 +1,8 @@
+// Package app implements the lazyssh TUI: tabs, connection form, and chrome.
+package app
+
 // State and key handling: what the app knows, and how each key changes it.
 // Nothing here decides how anything looks — see view.go for that.
-
-package main
 
 import (
 	"fmt"
@@ -36,7 +37,7 @@ type AppModel struct {
 	width, height int
 }
 
-func newApp() *AppModel {
+func New() *AppModel {
 	t := NewTab(1)
 	t.Host.SetValue("bandit.labs.overthewire.org")
 	t.Port.SetValue("2220")

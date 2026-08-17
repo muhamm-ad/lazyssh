@@ -1,4 +1,4 @@
-package main
+package app
 
 // Help entries shown in the Help modal, grouped by category. Keys match what
 // handleChromeKey / updateForm / updateTerminal actually listen for.

@@ -1,8 +1,8 @@
+package app
+
 // Rendering: the tab bar and the active tab's panel, stacked exactly as in
 // design/SSH_TUI.html. Sizes come from layout.go, colors from styles.go —
 // this file only assembles them.
-
-package main
 
 import (
 	"fmt"
