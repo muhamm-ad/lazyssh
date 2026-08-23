@@ -9,6 +9,10 @@ updates:
     labels:
       - "dependencies"
       - "gh-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "gomod"
     directory: "/"
@@ -17,3 +21,7 @@ updates:
     labels:
       - "maintenance"
       - "dependencies"
+    groups:
+      go-modules:
+        patterns:
+          - "*"
