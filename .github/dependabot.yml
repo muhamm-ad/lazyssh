@@ -5,15 +5,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    target-branch: "dev"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "gh-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+    target-branch: "dev"
     labels:
       - "maintenance"
       - "dependencies"
+    groups:
+      go-modules:
+        patterns:
+          - "*"
