@@ -328,8 +328,24 @@ func renderHelpColumn(cats []helpCategory) string {
 // viewAppTabBar renders one small rounded box per tab (dot + label + close glyph),
 // plus a trailing "+" box — the browser-tab strip from the design. When the
 // strip is wider than the window the tabs scroll horizontally so the active
-// tab stays fully in view; the "+" stays pinned on the right.
+// tab stays fully in view; the "+" stays after the visible tabs (and therefore
+// on the right once the strip fills the row).
 func (a *AppModel) viewAppTabBar(w int) string {
+	lay := a.tabBarLayout(w)
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, lay.tabs, " ", lay.add)
+	return lineStyle.Width(w).Render(tabBar)
+}
+
+type tabBar struct {
+	strip  tabStrip
+	tabs   string
+	add    string
+	offset int
+	addX   int
+	addW   int
+}
+
+func (a *AppModel) tabBarLayout(w int) tabBar {
 	addStyle := addTabStyle
 	if a.focusAdd {
 		addStyle = activeTabStyle
@@ -339,9 +355,15 @@ func (a *AppModel) viewAppTabBar(w int) string {
 	tabsW := max(0, w-strip.addW)
 	offset := max(0, min(a.tabBarScroll, max(0, strip.contentW-tabsW)))
 	tabs := scrollBlock(strip.content, offset, tabsW)
-
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, tabs, " ", add)
-	return lineStyle.Width(w).Render(tabBar)
+	addW := lipgloss.Width(add)
+	return tabBar{
+		strip:  strip,
+		tabs:   tabs,
+		add:    add,
+		offset: offset,
+		addX:   lipgloss.Width(tabs) + 1,
+		addW:   addW,
+	}
 }
 
 type tabStrip struct {

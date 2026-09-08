@@ -118,21 +118,19 @@ func (a *AppModel) scrollTabBar(msg tea.MouseWheelMsg) {
 }
 
 func (a *AppModel) clickTabBar(x int) tea.Cmd {
-	strip := a.measureTabStrip()
-	if x >= a.width-strip.addW {
+	lay := a.tabBarLayout(a.width)
+	if x >= lay.addX && x < lay.addX+lay.addW {
 		return a.addTab()
 	}
 
-	tabsW := max(0, a.width-strip.addW)
-	offset := max(0, min(a.tabBarScroll, max(0, strip.contentW-tabsW)))
-	if x < 0 || x >= tabsW {
+	if x < 0 || x >= lipgloss.Width(lay.tabs) {
 		return nil
 	}
-	cx := x + offset
+	cx := x + lay.offset
 	closeW := tabStyle.GetBorderRightSize() + tabStyle.GetPaddingRight() + 1
 	for i := range a.tabs {
-		start := strip.starts[i]
-		end := start + strip.widths[i]
+		start := lay.strip.starts[i]
+		end := start + lay.strip.widths[i]
 		if cx < start || cx >= end {
 			continue
 		}
