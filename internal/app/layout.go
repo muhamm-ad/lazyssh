@@ -6,7 +6,7 @@ const (
 	maxTabLabelWidth = 35
 
 	minAppWidth  = 90
-	minAppHeight = 32
+	minAppHeight = 30
 
 	fieldChrome   = 4 // rounded border (2) + horizontal padding (2)
 	labelColWidth = 10

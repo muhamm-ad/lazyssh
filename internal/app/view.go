@@ -115,7 +115,18 @@ func (a *AppModel) pointInModal(x, y int, modal string) bool {
 
 func (a *AppModel) viewMinSizeDialog() string {
 	required := fmt.Sprintf("%d × %d", minAppWidth, minAppHeight)
-	current := fmt.Sprintf("%d × %d", a.width, a.height)
+	wStyle, hStyle := dialogTitleStyle, dialogTitleStyle
+	if a.width < minAppWidth {
+		wStyle = dialogErrStyle
+	}
+	if a.height < minAppHeight {
+		hStyle = dialogErrStyle
+	}
+	current := lipgloss.JoinHorizontal(lipgloss.Center,
+		wStyle.Render(fmt.Sprintf("%d", a.width)),
+		dialogTitleStyle.Render(" × "),
+		hStyle.Render(fmt.Sprintf("%d", a.height)),
+	)
 	lines := []string{
 		dialogTitleStyle.Render("Window too small"),
 		"",
@@ -123,7 +134,7 @@ func (a *AppModel) viewMinSizeDialog() string {
 		dialogTitleStyle.Render(required),
 		"",
 		dialogBodyStyle.Render("Current size:"),
-		dialogErrStyle.Render(current),
+		current,
 		"",
 		dialogKeyStyle.Render("Resize the terminal to continue"),
 	}
