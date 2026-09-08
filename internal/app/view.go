@@ -115,7 +115,18 @@ func (a *AppModel) pointInModal(x, y int, modal string) bool {
 
 func (a *AppModel) viewMinSizeDialog() string {
 	required := fmt.Sprintf("%d × %d", minAppWidth, minAppHeight)
-	current := fmt.Sprintf("%d × %d", a.width, a.height)
+	wStyle, hStyle := dialogTitleStyle, dialogTitleStyle
+	if a.width < minAppWidth {
+		wStyle = dialogErrStyle
+	}
+	if a.height < minAppHeight {
+		hStyle = dialogErrStyle
+	}
+	current := lipgloss.JoinHorizontal(lipgloss.Center,
+		wStyle.Render(fmt.Sprintf("%d", a.width)),
+		dialogTitleStyle.Render(" × "),
+		hStyle.Render(fmt.Sprintf("%d", a.height)),
+	)
 	lines := []string{
 		dialogTitleStyle.Render("Window too small"),
 		"",
@@ -123,7 +134,7 @@ func (a *AppModel) viewMinSizeDialog() string {
 		dialogTitleStyle.Render(required),
 		"",
 		dialogBodyStyle.Render("Current size:"),
-		dialogErrStyle.Render(current),
+		current,
 		"",
 		dialogKeyStyle.Render("Resize the terminal to continue"),
 	}
@@ -317,8 +328,24 @@ func renderHelpColumn(cats []helpCategory) string {
 // viewAppTabBar renders one small rounded box per tab (dot + label + close glyph),
 // plus a trailing "+" box — the browser-tab strip from the design. When the
 // strip is wider than the window the tabs scroll horizontally so the active
-// tab stays fully in view; the "+" stays pinned on the right.
+// tab stays fully in view; the "+" stays after the visible tabs (and therefore
+// on the right once the strip fills the row).
 func (a *AppModel) viewAppTabBar(w int) string {
+	lay := a.tabBarLayout(w)
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, lay.tabs, " ", lay.add)
+	return lineStyle.Width(w).Render(tabBar)
+}
+
+type tabBar struct {
+	strip  tabStrip
+	tabs   string
+	add    string
+	offset int
+	addX   int
+	addW   int
+}
+
+func (a *AppModel) tabBarLayout(w int) tabBar {
 	addStyle := addTabStyle
 	if a.focusAdd {
 		addStyle = activeTabStyle
@@ -328,9 +355,15 @@ func (a *AppModel) viewAppTabBar(w int) string {
 	tabsW := max(0, w-strip.addW)
 	offset := max(0, min(a.tabBarScroll, max(0, strip.contentW-tabsW)))
 	tabs := scrollBlock(strip.content, offset, tabsW)
-
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Bottom, tabs, " ", add)
-	return lineStyle.Width(w).Render(tabBar)
+	addW := lipgloss.Width(add)
+	return tabBar{
+		strip:  strip,
+		tabs:   tabs,
+		add:    add,
+		offset: offset,
+		addX:   lipgloss.Width(tabs) + 1,
+		addW:   addW,
+	}
 }
 
 type tabStrip struct {
@@ -448,7 +481,7 @@ func (a *AppModel) formRows(t *Tab) []string {
 		a.fieldRow("port", &t.Port, t.Focus == fieldPort, t.TextSelected && t.Focus == fieldPort),
 		a.fieldRow("user", &t.User, t.Focus == fieldUser, t.TextSelected && t.Focus == fieldUser),
 		a.methodRow(t),
-		a.fieldRow(t.secretFieldLabel(), &t.Secret, t.Focus == fieldSecret, t.TextSelected && t.Focus == fieldSecret),
+		a.secretRow(t),
 		"",
 		a.connectRow(t),
 	}
@@ -471,6 +504,38 @@ func (a *AppModel) fieldRow(label string, in *textinput.Model, focused, selected
 		lineStyle.Width(labelGap).Render(""),
 		box,
 	)
+}
+
+func (a *AppModel) secretRow(t *Tab) string {
+	if !t.UsePassword {
+		return a.fieldRow(t.secretFieldLabel(), &t.Secret, t.Focus == fieldSecret, t.TextSelected && t.Focus == fieldSecret)
+	}
+	style := fieldStyle
+	if t.Focus == fieldSecret {
+		style = focusedFieldStyle
+	}
+	textW := a.secretTextWidth()
+	value := t.Secret.View()
+	if t.TextSelected && t.Focus == fieldSecret && t.Secret.Value() != "" {
+		value = highlightRange(echoedValue(t.Secret), t.selStart, t.selEnd)
+	}
+	value = clipLine(value, textW)
+	pad := max(0, textW-lipgloss.Width(value))
+	content := value + strings.Repeat(" ", pad+revealInnerGap) + a.revealLabel(t)
+	box := style.Width(a.fieldBoxWidth()).Render(clipLine(content, a.fieldInnerWidth()))
+	return lipgloss.JoinHorizontal(lipgloss.Center,
+		labelStyle.Render(t.secretFieldLabel()),
+		lineStyle.Width(labelGap).Render(""),
+		box,
+	)
+}
+
+func (a *AppModel) revealLabel(t *Tab) string {
+	style, label := revealLabelStyle, "show"
+	if t.ShowSecret {
+		style, label = revealLabelOnStyle, "hide"
+	}
+	return style.Render(label) + hintStyle.Render(" (ctrl+p)")
 }
 
 func echoedValue(in textinput.Model) string {

@@ -26,6 +26,7 @@ type Tab struct {
 
 	Host, Port, User, Secret textinput.Model
 	UsePassword              bool // method toggle: true = password, false = private key
+	ShowSecret               bool // password field is showing plaintext
 	Focus                    int  // one of the fieldXxx constants above
 
 	SSH *bubblessh.Model
@@ -378,12 +379,14 @@ func (t *Tab) closeSSH() {
 
 func (t *Tab) SetPassword(usePassword string) {
 	t.UsePassword = true
+	t.ShowSecret = false
 	t.Secret.Placeholder = "password"
 	t.Secret.EchoMode = textinput.EchoPassword
 	t.Secret.SetValue(usePassword)
 }
 
 func (t *Tab) ApplyMethod() {
+	t.ShowSecret = false
 	if t.UsePassword {
 		t.Secret.Placeholder = "password"
 		t.Secret.EchoMode = textinput.EchoPassword
@@ -392,6 +395,18 @@ func (t *Tab) ApplyMethod() {
 		t.Secret.Placeholder = "~/.ssh/id_ed25519"
 		t.Secret.EchoMode = textinput.EchoNormal
 		t.Secret.SetValue("~/.ssh/id_ed25519")
+	}
+}
+
+func (t *Tab) toggleSecretReveal() {
+	if !t.UsePassword {
+		return
+	}
+	t.ShowSecret = !t.ShowSecret
+	if t.ShowSecret {
+		t.Secret.EchoMode = textinput.EchoNormal
+	} else {
+		t.Secret.EchoMode = textinput.EchoPassword
 	}
 }
 

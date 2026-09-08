@@ -304,6 +304,11 @@ func (a *AppModel) updateForm(msg tea.Msg) tea.Cmd {
 			t.undoLast()
 			a.blurAll()
 			return a.focusCurrent()
+		case "ctrl+p":
+			if t.UsePassword {
+				t.toggleSecretReveal()
+			}
+			return nil
 		}
 
 		if t.focusedInput() != nil {
@@ -327,6 +332,7 @@ func (a *AppModel) updateForm(msg tea.Msg) tea.Cmd {
 				t.dropUndoIfUnchanged()
 				t.UsePassword = !t.UsePassword
 				t.ApplyMethod()
+				a.syncInputWidths()
 				return nil
 			case fieldConnect:
 				t.dropUndoIfUnchanged()
