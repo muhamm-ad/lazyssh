@@ -107,6 +107,9 @@ var (
 	tabDotOnStyle  = lipgloss.NewStyle().Foreground(tabDotOn)
 	tabDotOffStyle = lipgloss.NewStyle().Foreground(tabDotOff)
 	tabCloseStyle  = lipgloss.NewStyle().Foreground(tabCloseFg)
+
+	revealLabelStyle   = lipgloss.NewStyle().Foreground(mutedFg)
+	revealLabelOnStyle = lipgloss.NewStyle().Foreground(accentFg)
 )
 
 func styleInput(m *textinput.Model) {

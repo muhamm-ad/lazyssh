@@ -481,7 +481,7 @@ func (a *AppModel) formRows(t *Tab) []string {
 		a.fieldRow("port", &t.Port, t.Focus == fieldPort, t.TextSelected && t.Focus == fieldPort),
 		a.fieldRow("user", &t.User, t.Focus == fieldUser, t.TextSelected && t.Focus == fieldUser),
 		a.methodRow(t),
-		a.fieldRow(t.secretFieldLabel(), &t.Secret, t.Focus == fieldSecret, t.TextSelected && t.Focus == fieldSecret),
+		a.secretRow(t),
 		"",
 		a.connectRow(t),
 	}
@@ -504,6 +504,38 @@ func (a *AppModel) fieldRow(label string, in *textinput.Model, focused, selected
 		lineStyle.Width(labelGap).Render(""),
 		box,
 	)
+}
+
+func (a *AppModel) secretRow(t *Tab) string {
+	if !t.UsePassword {
+		return a.fieldRow(t.secretFieldLabel(), &t.Secret, t.Focus == fieldSecret, t.TextSelected && t.Focus == fieldSecret)
+	}
+	style := fieldStyle
+	if t.Focus == fieldSecret {
+		style = focusedFieldStyle
+	}
+	textW := a.secretTextWidth()
+	value := t.Secret.View()
+	if t.TextSelected && t.Focus == fieldSecret && t.Secret.Value() != "" {
+		value = highlightRange(echoedValue(t.Secret), t.selStart, t.selEnd)
+	}
+	value = clipLine(value, textW)
+	pad := max(0, textW-lipgloss.Width(value))
+	content := value + strings.Repeat(" ", pad+revealInnerGap) + a.revealLabel(t)
+	box := style.Width(a.fieldBoxWidth()).Render(clipLine(content, a.fieldInnerWidth()))
+	return lipgloss.JoinHorizontal(lipgloss.Center,
+		labelStyle.Render(t.secretFieldLabel()),
+		lineStyle.Width(labelGap).Render(""),
+		box,
+	)
+}
+
+func (a *AppModel) revealLabel(t *Tab) string {
+	style, label := revealLabelStyle, "show"
+	if t.ShowSecret {
+		style, label = revealLabelOnStyle, "hide"
+	}
+	return style.Render(label) + hintStyle.Render(" (ctrl+p)")
 }
 
 func echoedValue(in textinput.Model) string {

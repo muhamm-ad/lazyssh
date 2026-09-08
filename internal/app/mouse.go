@@ -190,6 +190,13 @@ func (a *AppModel) clickForm(x, y int) tea.Cmd {
 			if f < 0 {
 				return nil
 			}
+			if f == fieldSecret && a.hitRevealButton(t, formX, x) {
+				a.blurAll()
+				t.clearSelection()
+				t.Focus = fieldSecret
+				t.toggleSecretReveal()
+				return a.focusCurrent()
+			}
 			a.blurAll()
 			t.clearSelection()
 			t.Focus = f
@@ -205,4 +212,12 @@ func (a *AppModel) clickForm(x, y int) tea.Cmd {
 		rowY += h
 	}
 	return nil
+}
+
+func (a *AppModel) hitRevealButton(t *Tab, formX, x int) bool {
+	if !t.UsePassword {
+		return false
+	}
+	innerX := formX + labelColWidth + labelGap + fieldStyle.GetBorderLeftSize() + fieldStyle.GetPaddingLeft()
+	return x >= innerX+a.secretTextWidth() && x < formX+a.formWidth()
 }

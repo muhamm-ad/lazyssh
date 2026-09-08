@@ -41,6 +41,7 @@ var helpCategories = []helpCategory{
 			{"ctrl+x", "cut (not password)"},
 			{"ctrl+v", "paste"},
 			{"ctrl+z", "undo"},
+			{"ctrl+p", "show / hide password"},
 		},
 	},
 	{
@@ -64,6 +65,7 @@ var helpCategories = []helpCategory{
 			{"click (tab)", "select / close / add a tab"},
 			{"wheel (tab bar)", "scroll tabs horizontally"},
 			{"click (form)", "focus a field or connect"},
+			{"click (show)", "show / hide password"},
 			{"drag (field)", "select text in a field"},
 			{"wheel (terminal)", "scroll terminal history"},
 			{"drag (terminal)", "select terminal text"},

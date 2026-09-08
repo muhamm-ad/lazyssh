@@ -8,9 +8,11 @@ const (
 	minAppWidth  = 90
 	minAppHeight = 30
 
-	fieldChrome   = 4 // rounded border (2) + horizontal padding (2)
-	labelColWidth = 10
-	labelGap      = 1
+	fieldChrome      = 4 // rounded border (2) + horizontal padding (2)
+	labelColWidth    = 10
+	labelGap         = 1
+	revealLabelWidth = 13 // "show (ctrl+p)" / "hide (ctrl+p)"
+	revealInnerGap   = 1
 )
 
 // panelBoxHeight is the content panel's outer box height: the vertical space
@@ -46,6 +48,10 @@ func (a *AppModel) fieldInnerWidth() int {
 	return max(1, a.fieldBoxWidth()-fieldStyle.GetHorizontalFrameSize())
 }
 
+func (a *AppModel) secretTextWidth() int {
+	return max(1, a.fieldInnerWidth()-revealInnerGap-revealLabelWidth)
+}
+
 func (a *AppModel) formWidth() int {
 	return labelColWidth + labelGap + a.fieldBoxWidth()
 }
@@ -62,6 +68,10 @@ func (a *AppModel) syncInputWidths() {
 		t.Host.SetWidth(w)
 		t.Port.SetWidth(w)
 		t.User.SetWidth(w)
-		t.Secret.SetWidth(w)
+		if t.UsePassword {
+			t.Secret.SetWidth(a.secretTextWidth())
+		} else {
+			t.Secret.SetWidth(w)
+		}
 	}
 }
