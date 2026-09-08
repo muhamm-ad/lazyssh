@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/muhamm-ad/bubble-ssh v1.1.0
+	github.com/muhamm-ad/bubble-ssh v1.1.1
 	go.dalton.dog/bubbleup/v2 v2.0.0
 )
 
